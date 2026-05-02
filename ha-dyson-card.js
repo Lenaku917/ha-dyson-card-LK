@@ -587,13 +587,9 @@ class HaDysonCard extends HTMLElement {
     const handleCircle = wheel.querySelector(".wheel-handle");
     const handleHit = wheel.querySelector(".wheel-handle-hit");
     const angleNode = wheel.querySelector(".direction-angle");
-    const subtitleNode = wheel.querySelector(".subtitle");
 
     if (angleNode) {
       angleNode.textContent = `${bounds.center}\u00b0`;
-    }
-    if (subtitleNode) {
-      subtitleNode.textContent = this._displayAngle(bounds.center, bounds.width);
     }
     if (handleCircle) {
       handleCircle.setAttribute("cx", String(handle.x));
@@ -1075,7 +1071,15 @@ class HaDysonCard extends HTMLElement {
       await this._setNightMode(!this._nightModeOn(attributes));
     });
 
-    this.shadowRoot?.querySelector(".speed-slider")?.addEventListener("change", async (event) => {
+    const speedSlider = this.shadowRoot?.querySelector(".speed-slider");
+    speedSlider?.addEventListener("input", (event) => {
+      const nextSpeed = Math.max(0, Math.min(100, Math.round(Number(event.target.value))));
+      this._setPendingSpeed(nextSpeed);
+      this.shadowRoot?.querySelectorAll(".speed-value").forEach((node) => {
+        node.textContent = `${nextSpeed}%`;
+      });
+    });
+    speedSlider?.addEventListener("change", async (event) => {
       await this._setFanSpeed(event.target.value);
     });
 
@@ -1188,15 +1192,13 @@ class HaDysonCard extends HTMLElement {
       return;
     }
 
-    const title = this._config.title || this._friendlyName(entityId, "Dyson");
+    const title = String(this._config.title || "").trim();
     const attributes = fan.attributes || {};
     const powerState = fan.state === "on" ? "On" : "Off";
     const mode = attributes.preset_mode || attributes.mode || "Unknown";
     const temp = this._stateValue(this._temperatureEntity(), "");
     const humidity = this._stateValue(this._humidityEntity(), "");
     const voc = this._displayState(this._vocEntity(), "");
-    const airQuality = this._stateValue(this._airQualityEntity(), attributes.air_quality_category || "");
-    const qualityLabel = this._qualityLabel(airQuality || attributes.air_quality_category);
     const vocTone = voc ? this._qualityTone(this._qualityLabel(voc)) : "neutral";
     const speedPercent = this._currentSpeed(attributes);
     const filterPercent = this._filterPercent();
@@ -1244,31 +1246,12 @@ class HaDysonCard extends HTMLElement {
           gap: 14px;
         }
         .header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .title-stack {
-          display: grid;
-          gap: 3px;
+          display: block;
         }
         .title {
           font-size: 0.96rem;
           font-weight: 700;
           line-height: 1.2;
-        }
-        .subtitle {
-          font-size: 0.72rem;
-          color: var(--secondary-text-color);
-        }
-        .chip {
-          border-radius: 999px;
-          padding: 5px 9px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          background: color-mix(in srgb, var(--primary-color, #4f46e5) 14%, transparent);
-          color: var(--primary-text-color);
         }
         .control-panel {
           display: grid;
@@ -1312,10 +1295,17 @@ class HaDysonCard extends HTMLElement {
           background: color-mix(in srgb, var(--primary-color, #4f46e5) 18%, transparent);
           color: var(--primary-text-color);
         }
+        .airflow-row {
+          display: grid;
+          grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+          gap: 10px;
+          align-items: end;
+        }
         .direction-row,
         .preset-row {
           display: grid;
           gap: 8px;
+          min-width: 0;
         }
         .row-label {
           display: flex;
@@ -1334,6 +1324,7 @@ class HaDysonCard extends HTMLElement {
         }
         .direction-buttons {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
         }
         .timer-buttons {
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1442,7 +1433,7 @@ class HaDysonCard extends HTMLElement {
         }
         .wheel-speed {
           position: absolute;
-          left: 0;
+          right: 0;
           top: 58px;
           bottom: 58px;
           display: grid;
@@ -1453,6 +1444,7 @@ class HaDysonCard extends HTMLElement {
           font-size: 0.66rem;
           font-weight: 800;
           pointer-events: auto;
+          z-index: 2;
         }
         .wheel-speed ha-icon {
           --mdc-icon-size: 15px;
@@ -1469,7 +1461,7 @@ class HaDysonCard extends HTMLElement {
         .timer-flyout {
           position: absolute;
           right: 0;
-          top: 28px;
+          top: 10px;
           z-index: 3;
           display: grid;
           gap: 8px;
@@ -1483,7 +1475,7 @@ class HaDysonCard extends HTMLElement {
         .timer-icon-button {
           position: absolute;
           right: 4px;
-          top: 26px;
+          top: 8px;
           z-index: 4;
           width: 40px;
           height: 40px;
@@ -1528,57 +1520,39 @@ class HaDysonCard extends HTMLElement {
             transform: rotate(360deg);
           }
         }
-        .wheel-center-info {
+        .wheel-sensor-strip {
           position: absolute;
-          left: 50%;
-          top: 50%;
-          transform: translate(-50%, -50%);
+          left: 6px;
+          top: 30px;
           display: grid;
-          gap: 5px;
-          justify-items: center;
-          width: 78px;
+          align-items: center;
+          justify-items: start;
+          gap: 4px;
+          padding: 6px 7px;
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--card-background-color, #fff) 72%, transparent);
+          border: 1px solid color-mix(in srgb, var(--divider-color) 78%, transparent);
           pointer-events: none;
-          color: var(--primary-text-color);
-        }
-        .center-temp {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 3px;
-          font-size: 1.06rem;
-          font-weight: 800;
-          line-height: 1;
-        }
-        .center-temp ha-icon {
-          --mdc-icon-size: 16px;
-          color: var(--primary-color, #4f46e5);
-        }
-        .center-meta {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
           color: var(--secondary-text-color);
           font-size: 0.62rem;
           font-weight: 760;
           line-height: 1;
-          white-space: nowrap;
+          z-index: 1;
         }
-        .center-meta ha-icon {
+        .wheel-sensor-strip ha-icon {
           --mdc-icon-size: 12px;
         }
-        .center-voc {
+        .sensor-temp,
+        .sensor-humidity,
+        .sensor-voc,
+        .sensor-filter {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
-        }
-        .center-filter {
-          display: inline-flex;
-          align-items: center;
+          justify-content: center;
           gap: 2px;
         }
-        .center-filter ha-icon {
-          --mdc-icon-size: 12px;
+        .sensor-temp ha-icon {
+          color: var(--primary-color, #4f46e5);
         }
         .voc-dot {
           width: 8px;
@@ -1587,14 +1561,37 @@ class HaDysonCard extends HTMLElement {
           background: color-mix(in srgb, var(--secondary-text-color) 42%, transparent);
           box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-background-color, #fff) 78%, transparent);
         }
-        .center-voc.good .voc-dot {
+        .sensor-voc.good .voc-dot {
           background: #22c55e;
         }
-        .center-voc.fair .voc-dot {
+        .sensor-voc.fair .voc-dot {
           background: #f59e0b;
         }
-        .center-voc.poor .voc-dot {
+        .sensor-voc.poor .voc-dot {
           background: #ef4444;
+        }
+        .wheel-center-info {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          display: grid;
+          gap: 4px;
+          justify-items: center;
+          width: 78px;
+          pointer-events: none;
+          color: var(--primary-text-color);
+        }
+        .center-angle {
+          font-size: 1.18rem;
+          font-weight: 850;
+          line-height: 1;
+        }
+        .center-sweep {
+          color: var(--secondary-text-color);
+          font-size: 0.62rem;
+          font-weight: 760;
+          line-height: 1;
         }
         .center-operation {
           color: var(--secondary-text-color);
@@ -1707,6 +1704,13 @@ class HaDysonCard extends HTMLElement {
           pointer-events: none;
         }
         @media (max-width: 520px) {
+          .airflow-row {
+            grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+            gap: 8px;
+          }
+          .direction-chip {
+            padding-inline: 6px;
+          }
           .timer-custom {
             grid-template-columns: 1fr 1fr;
           }
@@ -1717,13 +1721,11 @@ class HaDysonCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="card ${this._busy ? "busy" : ""}">
-          <div class="header">
-            <div class="title-stack">
+          ${title ? `
+            <div class="header">
               <div class="title">${this._escapeHtml(title)}</div>
-              <div class="subtitle">${this._escapeHtml(qualityLabel)} · ${this._displayAngle(bounds.center, bounds.width)} · ${speedPercent}% airflow</div>
             </div>
-            <div class="chip">${powerState}</div>
-          </div>
+          ` : ""}
 
           <div class="control-panel">
             <div class="control-grid">
@@ -1735,24 +1737,26 @@ class HaDysonCard extends HTMLElement {
               ${this._renderToggleButton("night", "Night", "mdi:weather-night", nightActive, !this._nightModeEntity())}
             </div>
 
-            <div class="preset-row">
-              <div class="row-label">
-                <span>Sweep preset</span>
-                <strong>${bounds.width === 0 ? "Direct" : `${bounds.width}\u00b0`}</strong>
+            <div class="airflow-row">
+              <div class="preset-row">
+                <div class="row-label">
+                  <span>Sweep preset</span>
+                  <strong>${bounds.width === 0 ? "Direct" : `${bounds.width}\u00b0`}</strong>
+                </div>
+                <select class="preset-select" aria-label="Set sweep preset">
+                  ${presetWidths.map((preset) => this._renderWidthOption(preset, bounds.width)).join("")}
+                </select>
               </div>
-              <select class="preset-select" aria-label="Set sweep preset">
-                ${presetWidths.map((preset) => this._renderWidthOption(preset, bounds.width)).join("")}
-              </select>
-            </div>
 
-            <div class="direction-row">
-              <div class="row-label">
-                <span>Airflow direction</span>
-                <strong>${this._escapeHtml(airflowDirection)}</strong>
-              </div>
-              <div class="direction-buttons">
-                <button class="direction-chip ${airflowDirection === "forward" ? "active" : ""}" data-direction="forward">Forward</button>
-                <button class="direction-chip ${airflowDirection === "reverse" ? "active" : ""}" data-direction="reverse">Reverse</button>
+              <div class="direction-row">
+                <div class="row-label">
+                  <span>Airflow direction</span>
+                  <strong>${this._escapeHtml(airflowDirection)}</strong>
+                </div>
+                <div class="direction-buttons">
+                  <button class="direction-chip ${airflowDirection === "forward" ? "active" : ""}" data-direction="forward">Forward</button>
+                  <button class="direction-chip ${airflowDirection === "reverse" ? "active" : ""}" data-direction="reverse">Reverse</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1777,11 +1781,17 @@ class HaDysonCard extends HTMLElement {
               <div class="wheel-speed">
                 <ha-icon icon="mdi:fan"></ha-icon>
                 <input class="speed-slider" type="range" min="0" max="100" step="10" value="${speedPercent}" aria-label="Set airflow speed" />
-                <span>${speedPercent}%</span>
+                <span class="speed-value">${speedPercent}%</span>
               </div>
               <button class="timer-icon-button ${this._timerMenuOpen ? "active" : ""}" data-timer-toggle aria-label="Sleep timer ${this._escapeHtml(timerLabel)}">
                 <ha-icon icon="mdi:timer-outline"></ha-icon>
               </button>
+              <div class="wheel-sensor-strip">
+                <span class="sensor-temp"><ha-icon icon="mdi:thermometer"></ha-icon>${this._escapeHtml(temp || "—")}${temp ? this._escapeHtml(this._unit(this._temperatureEntity(), "\u00b0")) : ""}</span>
+                <span class="sensor-humidity"><ha-icon icon="mdi:water-percent"></ha-icon>${this._escapeHtml(humidity || "—")}${humidity ? this._escapeHtml(this._unit(this._humidityEntity(), "%")) : ""}</span>
+                <span class="sensor-voc ${vocTone}"><span class="voc-dot" aria-hidden="true"></span>VOC</span>
+                <span class="sensor-filter"><ha-icon icon="mdi:air-filter"></ha-icon>${filterPercent === null ? "—" : `${filterPercent}%`}</span>
+              </div>
               <div class="timer-flyout" style="${this._timerMenuOpen ? "" : "display:none;"}">
                 <div class="row-label">
                   <span>Sleep timer</span>
@@ -1799,15 +1809,8 @@ class HaDysonCard extends HTMLElement {
                 </div>
               </div>
               <div class="wheel-center-info">
-                <div class="center-temp">
-                  <ha-icon icon="mdi:thermometer"></ha-icon>
-                  <span>${this._escapeHtml(temp || "—")}${temp ? this._escapeHtml(this._unit(this._temperatureEntity(), "\u00b0")) : ""}</span>
-                </div>
-                <div class="center-meta">
-                  <span><ha-icon icon="mdi:water-percent"></ha-icon>${this._escapeHtml(humidity || "—")}${humidity ? this._escapeHtml(this._unit(this._humidityEntity(), "%")) : ""}</span>
-                  <span class="center-voc ${vocTone}"><span class="voc-dot" aria-hidden="true"></span>VOC</span>
-                  <span class="center-filter"><ha-icon icon="mdi:air-filter"></ha-icon>${filterPercent === null ? "—" : `${filterPercent}%`}</span>
-                </div>
+                <div class="center-angle">${bounds.center}\u00b0</div>
+                <div class="center-sweep">${bounds.width}\u00b0 sweep</div>
                 ${operationActive ? `<div class="center-operation">${this._escapeHtml(operationLabel)}</div>` : ""}
               </div>
             </div>

@@ -607,20 +607,33 @@ class HaDysonCard extends HTMLElement {
     return this._normalizeAngle(degrees);
   }
 
+  _isPointerOnHandle(event, element, direction) {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width) return false;
+    const scale = rect.width / 320;
+    const handle = this._pointForAngle(160, 160, 120, direction);
+    const x = (event.clientX - rect.left) / scale;
+    const y = (event.clientY - rect.top) / scale;
+    const distance = Math.hypot(x - handle.x, y - handle.y);
+    return distance <= 28;
+  }
+
   _bindWheel(attributes) {
     const wheel = this.shadowRoot?.querySelector(".wheel-button");
-    if (!wheel || !this._config.device_id) return;
+    if (!wheel || !this._deviceId()) return;
 
     const currentWidth = this._currentWidth(attributes);
     let draftDirection = this._currentDirection(attributes);
 
     const updateDraft = (event) => {
       draftDirection = this._angleFromPointer(event, wheel);
-      this._localDirection = draftDirection;
-      this._render();
+      this._draftDirection = draftDirection;
+      this._draftWidth = currentWidth;
+      this._updateDialPreview(draftDirection, currentWidth);
     };
 
     wheel.addEventListener("pointerdown", (event) => {
+      if (!this._isPointerOnHandle(event, wheel, draftDirection)) return;
       this._draggingDial = true;
       wheel.setPointerCapture?.(event.pointerId);
       updateDraft(event);
@@ -641,7 +654,8 @@ class HaDysonCard extends HTMLElement {
     wheel.addEventListener("pointerup", finish);
     wheel.addEventListener("pointercancel", () => {
       this._draggingDial = false;
-      this._localDirection = null;
+      this._draftDirection = null;
+      this._draftWidth = null;
       this._render();
     });
   }
@@ -655,11 +669,49 @@ class HaDysonCard extends HTMLElement {
 
     this.shadowRoot?.querySelectorAll("[data-width]")?.forEach((button) => {
       button.addEventListener("click", async () => {
-        const direction = this._currentDirection(attributes);
         const width = Number(button.dataset.width);
-        await this._commitDirection(direction, width);
+        await this._setSweepWidth(width, attributes);
       });
     });
+  }
+
+  async _setSweepWidth(width, attributes) {
+    if (!this._hass || this._busy) return;
+    const normalizedWidth = this._normalizeAngle(width);
+    const direction = this._currentDirection(attributes);
+
+    if (normalizedWidth === 0) {
+      await this._commitDirection(direction, 0);
+      return;
+    }
+
+    const selectEntity = this._oscillationSelectEntity();
+    const option = `${normalizedWidth}\u00b0`;
+    const options = this._stateObj(selectEntity)?.attributes?.options || [];
+    if (selectEntity && options.includes(option)) {
+      this._busy = true;
+      this._setPendingDirection(direction, normalizedWidth, `Applying ${option} sweep`);
+      this._render();
+      try {
+        await this._hass.callService("select", "select_option", {
+          entity_id: selectEntity,
+          option,
+        });
+        await this._hass.callService("fan", "oscillate", {
+          entity_id: this._config.entity,
+          oscillating: true,
+        });
+      } catch (error) {
+        this._clearPending(false);
+        throw error;
+      } finally {
+        this._busy = false;
+        this._render();
+      }
+      return;
+    }
+
+    await this._commitDirection(direction, normalizedWidth);
   }
 
   _render() {
@@ -760,7 +812,7 @@ class HaDysonCard extends HTMLElement {
           border: 0;
           padding: 0;
           background: none;
-          cursor: ${controlReady ? "pointer" : "default"};
+          cursor: default;
           width: min(100%, 320px);
           touch-action: none;
         }
@@ -795,6 +847,7 @@ class HaDysonCard extends HTMLElement {
           fill: var(--card-background-color, #fff);
           stroke: var(--primary-text-color, #111);
           stroke-width: 5;
+          cursor: ${controlReady ? "grab" : "default"};
         }
         .wheel-core {
           fill: color-mix(in srgb, var(--card-background-color, #ffffff) 88%, #000 12%);

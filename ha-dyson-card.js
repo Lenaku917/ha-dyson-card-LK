@@ -1,15 +1,69 @@
 class HaDysonCard extends HTMLElement {
+  static _registryCache = null;
+
   static getStubConfig() {
     return {
       entity: "fan.my_dyson",
-      device_id: "",
-      oscillation_angle_entity: "",
       default_oscillation_angle: 90,
     };
   }
 
-  static getConfigElement() {
-    return document.createElement("ha-dyson-card-editor");
+  static getConfigForm() {
+    return {
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: {
+            entity: {
+              filter: [
+                {
+                  domain: "fan",
+                },
+              ],
+            },
+          },
+        },
+        {
+          name: "title",
+          selector: {
+            text: {},
+          },
+        },
+        {
+          name: "default_oscillation_angle",
+          selector: {
+            number: {
+              min: 0,
+              max: 350,
+              step: 5,
+              unit_of_measurement: "°",
+              mode: "box",
+            },
+          },
+        },
+      ],
+      computeLabel: (schema) => {
+        switch (schema.name) {
+          case "entity":
+            return "Dyson entity";
+          case "title":
+            return "Title";
+          case "default_oscillation_angle":
+            return "Default oscillation width";
+          default:
+            return undefined;
+        }
+      },
+      computeHelper: (schema) => {
+        switch (schema.name) {
+          case "default_oscillation_angle":
+            return "Used when current sweep width cannot be derived from the Dyson device.";
+          default:
+            return undefined;
+        }
+      },
+    };
   }
 
   constructor() {
@@ -29,11 +83,6 @@ class HaDysonCard extends HTMLElement {
     }
     this._config = {
       title: "",
-      device_id: "",
-      temperature_entity: "",
-      humidity_entity: "",
-      air_quality_entity: "",
-      oscillation_angle_entity: "",
       default_oscillation_angle: 90,
       ...config,
     };
@@ -47,6 +96,78 @@ class HaDysonCard extends HTMLElement {
 
   getCardSize() {
     return 5;
+  }
+
+  async _ensureRegistryCache() {
+    if (!this._hass?.callWS) return null;
+    if (!HaDysonCard._registryCache) {
+      HaDysonCard._registryCache = Promise.all([
+        this._hass.callWS({ type: "config/entity_registry/list" }),
+        this._hass.callWS({ type: "config/device_registry/list" }),
+      ]).then(([entities, devices]) => ({ entities, devices }));
+    }
+    return HaDysonCard._registryCache;
+  }
+
+  async _ensureDerived() {
+    if (!this._hass || !this._config.entity || this._derived) return;
+    try {
+      const registry = await this._ensureRegistryCache();
+      if (!registry) return;
+      this._derived = this._deriveFromRegistry(registry);
+      this._render();
+    } catch (_error) {
+      // Keep the card usable even if registry queries fail.
+    }
+  }
+
+  _deriveFromRegistry(registry) {
+    const entries = Array.isArray(registry?.entities) ? registry.entities : [];
+    const deviceEntries = Array.isArray(registry?.devices) ? registry.devices : [];
+    const fanEntry = entries.find((entry) => entry.entity_id === this._config.entity);
+    const deviceId = fanEntry?.device_id || null;
+    const sameDevice = deviceId ? entries.filter((entry) => entry.device_id === deviceId) : [];
+    const device = deviceEntries.find((entry) => entry.id === deviceId) || null;
+
+    return {
+      deviceId,
+      device,
+      temperatureEntity: this._findEntityByHints(sameDevice, "sensor", ["temperature"]),
+      humidityEntity: this._findEntityByHints(sameDevice, "sensor", ["humidity"]),
+      airQualityEntity: this._findEntityByHints(sameDevice, "sensor", ["air_quality_category", "air_quality", "aqi", "pm25", "pm2_5", "pm10", "no2", "voc"]),
+      oscillationSelectEntity: this._findEntityByExactName(sameDevice, "select", ["Oscillation"]),
+      oscillationLowEntity: this._findEntityByExactName(sameDevice, "number", ["Oscillation Low Angle"]),
+      oscillationHighEntity: this._findEntityByExactName(sameDevice, "number", ["Oscillation High Angle"]),
+      oscillationCenterEntity: this._findEntityByExactName(sameDevice, "number", ["Oscillation Center Angle"]),
+      oscillationSpanEntity: this._findEntityByExactName(sameDevice, "number", ["Oscillation Angle"]),
+    };
+  }
+
+  _findEntityByExactName(entries, domain, names) {
+    const normalizedNames = names.map((name) => name.toLowerCase());
+    const matchingDomain = entries.filter((entry) => entry.entity_id?.startsWith(`${domain}.`));
+    const byOriginalName = matchingDomain.find((entry) => normalizedNames.includes(String(entry.original_name || "").toLowerCase()));
+    if (byOriginalName) return byOriginalName.entity_id;
+
+    const byName = matchingDomain.find((entry) => normalizedNames.includes(String(entry.name || "").toLowerCase()));
+    return byName?.entity_id || "";
+  }
+
+  _findEntityByHints(entries, domain, hints) {
+    const normalizedHints = hints.map((hint) => hint.toLowerCase());
+    const matchingDomain = entries.filter((entry) => entry.entity_id?.startsWith(`${domain}.`));
+    const byEntityId = normalizedHints
+      .map((hint) => matchingDomain.find((entry) => entry.entity_id.toLowerCase().includes(hint)))
+      .find(Boolean);
+    if (byEntityId) return byEntityId.entity_id;
+
+    const byOriginalName = normalizedHints
+      .map((hint) => {
+        const readableHint = hint.replaceAll("_", " ");
+        return matchingDomain.find((entry) => `${entry.original_name || ""} ${entry.name || ""}`.toLowerCase().includes(readableHint));
+      })
+      .find(Boolean);
+    return byOriginalName?.entity_id || "";
   }
 
   _stateObj(entityId) {
@@ -66,6 +187,34 @@ class HaDysonCard extends HTMLElement {
   _numericState(entityId) {
     const value = Number(this._stateValue(entityId, NaN));
     return Number.isFinite(value) ? value : null;
+  }
+
+  _deviceId() {
+    return this._derived?.deviceId || "";
+  }
+
+  _temperatureEntity() {
+    return this._derived?.temperatureEntity || "";
+  }
+
+  _humidityEntity() {
+    return this._derived?.humidityEntity || "";
+  }
+
+  _airQualityEntity() {
+    return this._derived?.airQualityEntity || "";
+  }
+
+  _oscillationAngleEntity() {
+    return this._derived?.oscillationSpanEntity || "";
+  }
+
+  _oscillationSelectEntity() {
+    return this._derived?.oscillationSelectEntity || "";
+  }
+
+  _oscillationCenterEntity() {
+    return this._derived?.oscillationCenterEntity || "";
   }
 
   _normalizeAngle(value) {
@@ -589,7 +738,7 @@ class HaDysonCard extends HTMLElement {
             ${this._renderMetric("Air quality", airQuality)}
           </div>
 
-          ${controlReady ? "" : `<div class="helper">This control uses the <code>hass_dyson.set_oscillation_angles</code> service, which requires the Dyson <code>device_id</code>.</div>`}
+          ${controlReady ? "" : `<div class="helper">This card is still resolving the related Dyson device and companion entities from the selected fan entity.</div>`}
         </div>
       </ha-card>
     `;
@@ -598,117 +747,7 @@ class HaDysonCard extends HTMLElement {
   }
 }
 
-class HaDysonCardEditor extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
-    this._config = {};
-  }
-
-  setConfig(config) {
-    this._config = {
-      title: "",
-      device_id: "",
-      temperature_entity: "",
-      humidity_entity: "",
-      air_quality_entity: "",
-      oscillation_angle_entity: "",
-      default_oscillation_angle: 90,
-      ...config,
-    };
-    this._render();
-  }
-
-  _emitConfig(patch) {
-    this._config = { ...this._config, ...patch };
-    this.dispatchEvent(new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    }));
-  }
-
-  _render() {
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: block; padding: 8px 0; }
-        .stack { display: grid; gap: 12px; }
-        label { display: grid; gap: 6px; font-size: 0.9rem; }
-        input {
-          border: 1px solid var(--divider-color);
-          border-radius: 12px;
-          padding: 10px 12px;
-          font: inherit;
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color);
-        }
-        .help {
-          color: var(--secondary-text-color);
-          font-size: 0.82rem;
-        }
-      </style>
-      <div class="stack">
-        <label>
-          Dyson entity
-          <input id="entity" value="${this._config.entity || ""}" placeholder="fan.my_dyson" />
-        </label>
-        <label>
-          Dyson device id
-          <input id="device_id" value="${this._config.device_id || ""}" placeholder="Required for oscillation control" />
-        </label>
-        <label>
-          Title
-          <input id="title" value="${this._config.title || ""}" placeholder="Optional card title" />
-        </label>
-        <label>
-          Oscillation angle entity
-          <input id="oscillation_angle_entity" value="${this._config.oscillation_angle_entity || ""}" placeholder="number.my_dyson_oscillation_angle" />
-        </label>
-        <label>
-          Default oscillation width
-          <input id="default_oscillation_angle" value="${this._config.default_oscillation_angle || 90}" placeholder="90" />
-        </label>
-        <label>
-          Temperature entity
-          <input id="temperature_entity" value="${this._config.temperature_entity || ""}" placeholder="sensor.my_dyson_temperature" />
-        </label>
-        <label>
-          Humidity entity
-          <input id="humidity_entity" value="${this._config.humidity_entity || ""}" placeholder="sensor.my_dyson_humidity" />
-        </label>
-        <label>
-          Air quality entity
-          <input id="air_quality_entity" value="${this._config.air_quality_entity || ""}" placeholder="sensor.my_dyson_air_quality_index" />
-        </label>
-        <div class="help">Install and configure <code>hass_dyson</code> first. To control the 360 dial, set the integration <code>device_id</code> and, ideally, the Dyson oscillation angle <code>number</code> entity.</div>
-      </div>
-    `;
-
-    const textFields = [
-      "entity",
-      "device_id",
-      "title",
-      "oscillation_angle_entity",
-      "temperature_entity",
-      "humidity_entity",
-      "air_quality_entity",
-    ];
-
-    textFields.forEach((key) => {
-      this.shadowRoot.getElementById(key)?.addEventListener("change", (event) => {
-        this._emitConfig({ [key]: event.target.value.trim() });
-      });
-    });
-
-    this.shadowRoot.getElementById("default_oscillation_angle")?.addEventListener("change", (event) => {
-      const value = Number(event.target.value);
-      this._emitConfig({ default_oscillation_angle: Number.isFinite(value) ? value : 90 });
-    });
-  }
-}
-
 customElements.define("ha-dyson-card", HaDysonCard);
-customElements.define("ha-dyson-card-editor", HaDysonCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

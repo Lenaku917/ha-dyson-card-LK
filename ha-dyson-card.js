@@ -597,15 +597,6 @@ class HaDysonCard extends HTMLElement {
     const direct = wheel.querySelector(".wheel-direct");
     const handleCircle = wheel.querySelector(".wheel-handle");
     const handleHit = wheel.querySelector(".wheel-handle-hit");
-    const angleNode = wheel.querySelector(".center-angle");
-    const sweepNode = wheel.querySelector(".center-sweep");
-
-    if (angleNode) {
-      angleNode.textContent = `${bounds.center}\u00b0`;
-    }
-    if (sweepNode) {
-      sweepNode.textContent = `${bounds.width}\u00b0 sweep`;
-    }
     if (handleCircle) {
       handleCircle.setAttribute("cx", String(handle.x));
       handleCircle.setAttribute("cy", String(handle.y));
@@ -772,12 +763,14 @@ class HaDysonCard extends HTMLElement {
         .map((preset) => {
           const direction = Number(preset.direction);
           const width = Number(preset.width);
+          const speed = Number(preset.speed);
           return {
             id: String(preset.id || ""),
             name: String(preset.name || "").trim(),
             icon: String(preset.icon || "mdi:crosshairs-gps").trim(),
             direction: Number.isFinite(direction) ? this._normalizeAngle(direction) : NaN,
             width: Number.isFinite(width) ? this._normalizeAngle(width) : NaN,
+            speed: Number.isFinite(speed) ? this._clamp(Math.round(speed), 0, 100) : null,
           };
         })
         .filter((preset) => preset.id && preset.name && Number.isFinite(preset.direction) && Number.isFinite(preset.width));
@@ -794,10 +787,11 @@ class HaDysonCard extends HTMLElement {
     }
   }
 
-  _addDirectionPreset(name, icon, direction, width) {
+  _addDirectionPreset(name, icon, direction, width, speed) {
     const trimmedName = String(name || "").trim();
     if (!trimmedName) return;
     const normalizedIcon = String(icon || "mdi:crosshairs-gps").trim() || "mdi:crosshairs-gps";
+    const normalizedSpeed = Number(speed);
     const presets = this._directionPresets();
     presets.push({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -805,6 +799,7 @@ class HaDysonCard extends HTMLElement {
       icon: normalizedIcon.startsWith("mdi:") ? normalizedIcon : `mdi:${normalizedIcon}`,
       direction: this._normalizeAngle(direction),
       width: this._normalizeAngle(width),
+      speed: Number.isFinite(normalizedSpeed) ? this._clamp(Math.round(normalizedSpeed), 0, 100) : null,
     });
     this._saveDirectionPresets(presets);
   }
@@ -813,7 +808,7 @@ class HaDysonCard extends HTMLElement {
     this._saveDirectionPresets(this._directionPresets().filter((preset) => preset.id !== id));
   }
 
-  _renderDirectionPresets(direction, width, controlReady) {
+  _renderDirectionPresets(direction, width, speed, controlReady) {
     const presets = this._directionPresets();
     const disabled = controlReady ? "" : "disabled";
     const editor = this._presetEditorOpen ? `
@@ -828,18 +823,15 @@ class HaDysonCard extends HTMLElement {
     return `
       <div class="direction-presets">
         <div class="direction-presets-row">
-          ${presets.map((preset) => `
+          ${presets.length ? presets.map((preset) => `
             <div class="direction-preset-item">
-              <button class="direction-preset-button" data-preset-apply="${this._escapeHtml(preset.id)}" title="${this._escapeHtml(this._displayAngle(preset.direction, preset.width))}" ${disabled}>
+              <button class="direction-preset-button" data-preset-apply="${this._escapeHtml(preset.id)}" title="${this._escapeHtml(`${this._displayAngle(preset.direction, preset.width)}${preset.speed === null ? "" : ` · ${preset.speed}% speed`}`)}" ${disabled}>
                 <ha-icon icon="${this._escapeHtml(preset.icon)}"></ha-icon>
                 <span>${this._escapeHtml(preset.name)}</span>
               </button>
               <button class="direction-preset-remove" data-preset-remove="${this._escapeHtml(preset.id)}" aria-label="Remove ${this._escapeHtml(preset.name)}">×</button>
             </div>
-          `).join("")}
-          <button class="direction-preset-add" data-preset-add aria-label="Save current Dyson direction" ${disabled}>
-            <ha-icon icon="mdi:plus"></ha-icon>
-          </button>
+          `).join("") : `<span class="direction-presets-empty">No snapshots saved</span>`}
         </div>
         ${editor}
       </div>
@@ -867,6 +859,15 @@ class HaDysonCard extends HTMLElement {
   _renderWidthOption(preset, currentWidth) {
     const label = preset === 0 ? "Direct" : `${preset}\u00b0`;
     return `<option value="${preset}" ${currentWidth === preset ? "selected" : ""}>${label}</option>`;
+  }
+
+  _renderSweepButton(preset, currentWidth, disabled = false) {
+    const active = currentWidth === preset;
+    const label = preset === 0 ? "0" : preset === 350 ? "350" : `${preset}`;
+    const title = preset === 0 ? "Direct" : preset === 350 ? "Wide sweep" : `${preset}\u00b0 sweep`;
+    return `<button class="sweep-dial-option sweep-dial-option--${preset} ${active ? "active" : ""}" data-sweep-width="${preset}" title="${this._escapeHtml(title)}" aria-label="${this._escapeHtml(title)}" ${disabled ? "disabled" : ""}>
+      <span>${label}</span>
+    </button>`;
   }
 
   _escapeHtml(value) {
@@ -1304,6 +1305,9 @@ class HaDysonCard extends HTMLElement {
     speedSlider?.addEventListener("input", (event) => {
       const nextSpeed = Math.max(0, Math.min(100, Math.round(Number(event.target.value))));
       this._setPendingSpeed(nextSpeed);
+      this.shadowRoot?.querySelectorAll(".speed-control").forEach((node) => {
+        node.style.setProperty("--speed-fill", `${nextSpeed}%`);
+      });
       this.shadowRoot?.querySelectorAll(".speed-value").forEach((node) => {
         node.textContent = `${nextSpeed}%`;
       });
@@ -1316,6 +1320,11 @@ class HaDysonCard extends HTMLElement {
       button.addEventListener("click", async () => {
         await this._setAirflowDirection(button.dataset.direction);
       });
+    });
+
+    this.shadowRoot?.querySelector("[data-direction-toggle]")?.addEventListener("click", async () => {
+      const nextDirection = this._fanDirection(attributes) === "forward" ? "reverse" : "forward";
+      await this._setAirflowDirection(nextDirection);
     });
 
     this.shadowRoot?.querySelectorAll("[data-timer]")?.forEach((button) => {
@@ -1355,10 +1364,6 @@ class HaDysonCard extends HTMLElement {
       await this._setSleepTimer(hours * 60);
     });
 
-    this.shadowRoot?.querySelector(".preset-select")?.addEventListener("change", async (event) => {
-      await this._setSweepWidth(Number(event.target.value), attributes);
-    });
-
     this.shadowRoot?.querySelector("[data-preset-add]")?.addEventListener("click", () => {
       this._presetEditorOpen = true;
       this._render();
@@ -1372,7 +1377,13 @@ class HaDysonCard extends HTMLElement {
     this.shadowRoot?.querySelector("[data-preset-save]")?.addEventListener("click", () => {
       const name = this.shadowRoot?.querySelector(".preset-name-input")?.value;
       const icon = this.shadowRoot?.querySelector(".preset-icon-input")?.value;
-      this._addDirectionPreset(name, icon, this._currentDirection(attributes), this._currentWidth(attributes));
+      this._addDirectionPreset(
+        name,
+        icon,
+        this._currentDirection(attributes),
+        this._currentWidth(attributes),
+        this._currentSpeed(attributes),
+      );
       this._presetEditorOpen = false;
       this._render();
     });
@@ -1382,6 +1393,9 @@ class HaDysonCard extends HTMLElement {
         const preset = this._directionPresets().find((candidate) => candidate.id === button.dataset.presetApply);
         if (!preset) return;
         await this._commitDirection(preset.direction, preset.width);
+        if (preset.speed !== null) {
+          await this._setFanSpeed(preset.speed);
+        }
       });
     });
 
@@ -1390,6 +1404,12 @@ class HaDysonCard extends HTMLElement {
         event.stopPropagation();
         this._removeDirectionPreset(button.dataset.presetRemove);
         this._render();
+      });
+    });
+
+    this.shadowRoot?.querySelectorAll("[data-sweep-width]")?.forEach((button) => {
+      button.addEventListener("click", async () => {
+        await this._setSweepWidth(Number(button.dataset.sweepWidth), attributes);
       });
     });
   }
@@ -1510,10 +1530,17 @@ class HaDysonCard extends HTMLElement {
         :host {
           display: block;
         }
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
         ha-card {
           --dyson-panel-bg: color-mix(in srgb, var(--card-background-color, #fff) 94%, #000 6%);
           --dyson-field-bg: color-mix(in srgb, var(--card-background-color, #fff) 84%, transparent);
           --dyson-raised-bg: var(--card-background-color, #fff);
+          --dyson-pill-bg: color-mix(in srgb, var(--card-background-color, #fff) 90%, var(--primary-text-color) 5%);
+          --dyson-active-bg: color-mix(in srgb, var(--primary-color, #4f46e5) 16%, var(--card-background-color, #fff));
           --dyson-control-bg: color-mix(in srgb, var(--card-background-color, #fff) 92%, #000 8%);
           --dyson-inset-bg: color-mix(in srgb, var(--card-background-color, #fff) 84%, #000 16%);
           --dyson-border: var(--divider-color);
@@ -1529,6 +1556,8 @@ class HaDysonCard extends HTMLElement {
             --dyson-panel-bg: color-mix(in srgb, var(--card-background-color, #111) 82%, var(--primary-text-color) 6%, #000 12%);
             --dyson-field-bg: color-mix(in srgb, var(--card-background-color, #111) 78%, var(--primary-text-color) 8%, #000 14%);
             --dyson-raised-bg: color-mix(in srgb, var(--card-background-color, #111) 76%, var(--primary-text-color) 7%, #000 17%);
+            --dyson-pill-bg: color-mix(in srgb, var(--card-background-color, #111) 74%, var(--primary-text-color) 9%, #000 17%);
+            --dyson-active-bg: color-mix(in srgb, var(--primary-color, #4f46e5) 18%, var(--card-background-color, #111));
             --dyson-control-bg: color-mix(in srgb, var(--card-background-color, #111) 74%, var(--primary-text-color) 7%, #000 19%);
             --dyson-inset-bg: color-mix(in srgb, var(--card-background-color, #111) 68%, #000 24%, var(--primary-text-color) 8%);
             --dyson-border: color-mix(in srgb, var(--divider-color) 78%, var(--primary-text-color) 12%);
@@ -1551,29 +1580,30 @@ class HaDysonCard extends HTMLElement {
         }
         .control-panel {
           display: grid;
-          gap: 10px;
-          border: 1px solid var(--dyson-border);
-          border-radius: 14px;
-          padding: 10px;
-          background: var(--dyson-panel-bg);
+          gap: 8px;
+          border: 1px solid var(--dyson-soft-border);
+          border-radius: 18px;
+          padding: 8px;
+          background: color-mix(in srgb, var(--dyson-panel-bg) 72%, transparent);
         }
         .control-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 7px;
+          gap: 6px;
         }
         .control-pill,
         .timer-chip,
         .direction-chip {
           min-width: 0;
-          border: 1px solid var(--dyson-border);
+          border: 1px solid var(--dyson-soft-border);
           border-radius: 999px;
-          padding: 9px 8px;
-          background: var(--dyson-raised-bg);
+          padding: 8px 8px;
+          background: var(--dyson-pill-bg);
           color: var(--primary-text-color);
           font: inherit;
-          font-size: 0.78rem;
+          font-size: 0.74rem;
           font-weight: 750;
+          box-shadow: var(--dyson-inner-highlight);
         }
         .control-pill {
           display: inline-flex;
@@ -1594,26 +1624,28 @@ class HaDysonCard extends HTMLElement {
         .control-pill.active,
         .timer-chip.active,
         .direction-chip.active {
-          border-color: transparent;
-          background: color-mix(in srgb, var(--primary-color, #4f46e5) 18%, transparent);
+          border-color: color-mix(in srgb, var(--primary-color, #4f46e5) 34%, transparent);
+          background: var(--dyson-active-bg);
           color: var(--primary-text-color);
         }
-        .airflow-row {
+        .direction-row {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
-          align-items: start;
-        }
-        .direction-row,
-        .preset-row {
-          display: grid;
-          grid-template-rows: auto 38px;
+          align-items: stretch;
           gap: 6px;
           min-width: 0;
           border: 1px solid var(--dyson-soft-border);
-          border-radius: 16px;
-          padding: 8px;
-          background: var(--dyson-field-bg);
+          border-radius: 18px;
+          padding: 6px;
+          background: color-mix(in srgb, var(--dyson-field-bg) 82%, transparent);
+        }
+        .airflow-control,
+        .sleep-timer-control {
+          min-width: 0;
+          display: grid;
+          grid-template-rows: auto 32px;
+          gap: 4px;
+          padding: 3px;
         }
         .row-label {
           display: flex;
@@ -1621,9 +1653,10 @@ class HaDysonCard extends HTMLElement {
           justify-content: flex-start;
           gap: 6px;
           color: var(--secondary-text-color);
-          font-size: 0.68rem;
+          font-size: 0.66rem;
           font-weight: 750;
-          min-height: 20px;
+          min-height: 16px;
+          padding-left: 5px;
         }
         .row-label span,
         .row-label strong {
@@ -1631,25 +1664,50 @@ class HaDysonCard extends HTMLElement {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .direction-buttons,
         .timer-buttons,
         .timer-custom {
           display: grid;
           gap: 8px;
         }
-        .direction-buttons {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .direction-chip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           gap: 5px;
+          width: 100%;
+          min-height: 34px;
+          padding: 7px 10px;
+          font-size: 0.68rem;
+        }
+        .direction-chip ha-icon {
+          --mdc-icon-size: 14px;
         }
         .timer-buttons {
           grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .timer-inline-buttons {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 4px;
+          min-width: 0;
+        }
+        .timer-inline-buttons .timer-chip {
+          min-width: 0;
+          min-height: 32px;
+          padding: 6px 4px;
+          font-size: 0.66rem;
+        }
+        .timer-plus {
+          font-size: 0;
+        }
+        .timer-plus ha-icon {
+          --mdc-icon-size: 16px;
         }
         .timer-custom {
           grid-template-columns: minmax(0, 1fr) auto auto;
           align-items: center;
         }
         .timer-custom-input,
-        .preset-select,
         .target-temp-input {
           min-width: 0;
           border: 1px solid var(--dyson-border);
@@ -1752,13 +1810,13 @@ class HaDysonCard extends HTMLElement {
         }
         .wheel-speed {
           position: absolute;
-          right: 14px;
-          top: 52px;
-          bottom: 40px;
+          right: -4px;
+          top: 42px;
+          bottom: 42px;
           display: grid;
-          grid-template-rows: auto minmax(0, 1fr) auto;
+          grid-template-rows: minmax(0, 1fr) auto;
           justify-items: center;
-          gap: 7px;
+          gap: 8px;
           color: var(--secondary-text-color);
           font-size: 0.66rem;
           font-weight: 800;
@@ -1769,57 +1827,100 @@ class HaDysonCard extends HTMLElement {
           --mdc-icon-size: 15px;
           color: var(--primary-color, #4f46e5);
         }
+        .speed-control {
+          --speed-fill: ${speedPercent}%;
+          position: relative;
+          width: 38px;
+          height: 196px;
+          display: grid;
+          place-items: center;
+          border-radius: 999px;
+          touch-action: none;
+          filter: drop-shadow(0 7px 14px color-mix(in srgb, #000 12%, transparent));
+        }
+        .speed-rail {
+          position: absolute;
+          inset: 0 5px;
+          overflow: hidden;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--primary-text-color) 9%, transparent);
+          background:
+            linear-gradient(
+              to top,
+              color-mix(in srgb, var(--primary-color, #03a9f4) 78%, white 10%) 0 var(--speed-fill),
+              color-mix(in srgb, var(--dyson-inset-bg) 82%, var(--primary-text-color) 5%) var(--speed-fill) 100%
+            );
+          box-shadow:
+            inset 0 2px 5px color-mix(in srgb, #000 18%, transparent),
+            inset 0 -1px 0 color-mix(in srgb, white 18%, transparent);
+          pointer-events: none;
+        }
+        .speed-rail::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(to right, color-mix(in srgb, white 28%, transparent), transparent 42%),
+            linear-gradient(to bottom, color-mix(in srgb, white 22%, transparent), transparent 24%);
+          opacity: 0.42;
+        }
         .speed-slider {
-          width: 42px;
-          height: 146px;
-          accent-color: var(--primary-color, #4f46e5);
+          position: relative;
+          z-index: 1;
+          width: 38px;
+          height: 196px;
           writing-mode: vertical-lr;
           direction: rtl;
           touch-action: none;
           appearance: none;
           background: transparent;
+          cursor: pointer;
         }
         .speed-slider::-webkit-slider-runnable-track {
-          width: 42px;
-          height: 146px;
+          width: 38px;
+          height: 196px;
           background: transparent;
           border: 0;
         }
         .speed-slider::-webkit-slider-thumb {
           appearance: none;
-          width: 28px;
-          height: 44px;
+          width: 38px;
+          height: 196px;
           border: 0;
-          border-radius: 999px;
-          background: var(--primary-color, #4f46e5);
-          box-shadow:
-            0 2px 8px color-mix(in srgb, #000 24%, transparent),
-            inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
         }
         .speed-slider::-moz-range-track {
-          width: 42px;
-          height: 146px;
+          width: 38px;
+          height: 196px;
           background: transparent;
           border: 0;
         }
         .speed-slider::-moz-range-thumb {
-          width: 28px;
-          height: 44px;
+          width: 38px;
+          height: 196px;
           border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+        }
+        .speed-value {
+          min-width: 28px;
+          padding: 3px 6px;
           border-radius: 999px;
-          background: var(--primary-color, #4f46e5);
-          box-shadow:
-            0 2px 8px color-mix(in srgb, #000 24%, transparent),
-            inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+          background: color-mix(in srgb, var(--primary-text-color) 6%, transparent);
+          color: var(--secondary-text-color);
+          text-align: center;
+          font-size: 0.58rem;
+          line-height: 1;
         }
         .timer-flyout {
-          position: absolute;
-          right: 0;
-          top: 10px;
+          position: relative;
           z-index: 3;
           display: grid;
           gap: 8px;
-          width: min(210px, 72%);
+          width: 100%;
           padding: 10px;
           border: 1px solid var(--dyson-border);
           border-radius: 14px;
@@ -1827,28 +1928,24 @@ class HaDysonCard extends HTMLElement {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
         }
         .timer-icon-button {
-          position: absolute;
-          right: 14px;
-          top: 16px;
-          z-index: 4;
-          width: 38px;
-          height: 38px;
-          border: 1px solid var(--dyson-border);
+          width: 46px;
+          height: 34px;
+          border: 1px solid var(--dyson-soft-border);
           border-radius: 999px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           padding: 0;
-          background: var(--dyson-raised-bg);
+          background: var(--dyson-pill-bg);
           color: var(--primary-text-color);
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+          box-shadow: var(--dyson-inner-highlight);
         }
         .timer-icon-button.active {
           border-color: transparent;
           background: color-mix(in srgb, var(--primary-color, #4f46e5) 18%, var(--card-background-color, #fff));
         }
         .timer-icon-button ha-icon {
-          --mdc-icon-size: 20px;
+          --mdc-icon-size: 19px;
         }
         .wheel-core {
           fill: color-mix(in srgb, var(--card-background-color, #ffffff) 88%, #000 12%);
@@ -1938,23 +2035,157 @@ class HaDysonCard extends HTMLElement {
           left: 50%;
           top: 50%;
           transform: translate(-50%, -50%);
-          display: grid;
-          gap: 4px;
-          justify-items: center;
-          width: 72px;
-          pointer-events: none;
+          width: 132px;
+          height: 132px;
+          pointer-events: auto;
           color: var(--primary-text-color);
+          z-index: 3;
         }
-        .center-angle {
-          font-size: 1.1rem;
-          font-weight: 850;
-          line-height: 1;
+        .sweep-dial {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--primary-text-color) 4%, transparent);
+          border: 1px solid color-mix(in srgb, var(--primary-text-color) 8%, transparent);
+          box-shadow:
+            inset 0 1px 1px color-mix(in srgb, white 20%, transparent),
+            0 8px 24px color-mix(in srgb, #000 10%, transparent);
+          --sweep-start: 0deg;
+          --sweep-size: 72deg;
         }
-        .center-sweep {
+        .sweep-dial-active-0 {
+          --sweep-start: -36deg;
+        }
+        .sweep-dial-active-45 {
+          --sweep-start: 36deg;
+        }
+        .sweep-dial-active-90 {
+          --sweep-start: 108deg;
+        }
+        .sweep-dial-active-180 {
+          --sweep-start: 180deg;
+        }
+        .sweep-dial-active-350 {
+          --sweep-start: 252deg;
+        }
+        .sweep-dial::before {
+          content: "";
+          position: absolute;
+          inset: 10px;
+          border-radius: 999px;
+          background:
+            radial-gradient(circle at center, transparent 0 39px, color-mix(in srgb, var(--card-background-color, #fff) 74%, transparent) 40px 53px, transparent 54px),
+            conic-gradient(
+              from var(--sweep-start),
+              color-mix(in srgb, var(--primary-color, #03a9f4) 30%, transparent) 0 var(--sweep-size),
+              transparent var(--sweep-size) 360deg
+            ),
+            repeating-conic-gradient(
+              from -36deg,
+              color-mix(in srgb, var(--primary-text-color) 14%, transparent) 0 1deg,
+              transparent 1deg 72deg
+            ),
+            color-mix(in srgb, var(--card-background-color, #fff) 72%, transparent);
+          border: 1px solid color-mix(in srgb, var(--primary-text-color) 8%, transparent);
+          box-shadow:
+            inset 0 1px 2px color-mix(in srgb, white 18%, transparent),
+            inset 0 -1px 2px color-mix(in srgb, #000 7%, transparent);
+        }
+        .sweep-dial::after {
+          content: "";
+          position: absolute;
+          inset: 42px;
+          border-radius: 999px;
+          background:
+            radial-gradient(circle at 50% 28%, color-mix(in srgb, white 16%, transparent), transparent 42%),
+            color-mix(in srgb, var(--card-background-color, #fff) 92%, transparent);
+          border: 1px solid color-mix(in srgb, var(--primary-text-color) 7%, transparent);
+          box-shadow: 0 2px 9px color-mix(in srgb, #000 10%, transparent);
+        }
+        .sweep-dial-option,
+        .snapshot-button {
+          position: absolute;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
           color: var(--secondary-text-color);
-          font-size: 0.62rem;
-          font-weight: 760;
+          font: inherit;
+          font-size: 0.54rem;
+          font-weight: 800;
           line-height: 1;
+        }
+        .sweep-dial-option {
+          width: 34px;
+          height: 34px;
+          padding: 0;
+          transform: translate(-50%, -50%);
+          z-index: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .sweep-dial-option span {
+          min-width: 25px;
+          height: 22px;
+          padding: 0 4px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--card-background-color, #fff) 88%, transparent);
+          box-shadow:
+            0 1px 3px color-mix(in srgb, #000 9%, transparent),
+            inset 0 0 0 1px color-mix(in srgb, var(--primary-text-color) 8%, transparent);
+        }
+        .sweep-dial-option--0 {
+          left: 50%;
+          top: 14%;
+        }
+        .sweep-dial-option--45 {
+          left: 84.5%;
+          top: 39%;
+        }
+        .sweep-dial-option--90 {
+          left: 71%;
+          top: 81.5%;
+        }
+        .sweep-dial-option--180 {
+          left: 29%;
+          top: 81.5%;
+        }
+        .sweep-dial-option--350 {
+          left: 15.5%;
+          top: 39%;
+        }
+        .sweep-dial-option.active span {
+          background: var(--dyson-active-bg);
+          color: var(--primary-text-color);
+          box-shadow:
+            0 2px 6px color-mix(in srgb, var(--primary-color, #03a9f4) 18%, transparent),
+            inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 22%, transparent);
+        }
+        .snapshot-button.active {
+          background: var(--dyson-active-bg);
+          color: var(--primary-text-color);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 18%, transparent);
+        }
+        .snapshot-button {
+          left: 50%;
+          top: 50%;
+          width: 42px;
+          height: 42px;
+          transform: translate(-50%, -50%);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--dyson-soft-border);
+          background: var(--dyson-pill-bg);
+          box-shadow: var(--dyson-inner-highlight);
+          z-index: 2;
+        }
+        .snapshot-button ha-icon {
+          --mdc-icon-size: 18px;
         }
         .center-operation {
           color: var(--secondary-text-color);
@@ -1964,14 +2195,6 @@ class HaDysonCard extends HTMLElement {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-        }
-        .preset-row {
-          min-width: 0;
-        }
-        .preset-select {
-          width: 100%;
-          min-height: 38px;
-          padding: 6px 8px;
         }
         .mode-row {
           box-sizing: border-box;
@@ -2018,7 +2241,9 @@ class HaDysonCard extends HTMLElement {
         .target-temp-input:disabled,
         .speed-slider:disabled,
         .direction-preset-button:disabled,
-        .direction-preset-add:disabled {
+        .direction-preset-add:disabled,
+        .snapshot-button:disabled,
+        .sweep-dial-option:disabled {
           opacity: 0.44;
         }
         .target-temp-wrap {
@@ -2116,6 +2341,13 @@ class HaDysonCard extends HTMLElement {
           min-height: 38px;
           overflow-x: auto;
           scrollbar-width: none;
+        }
+        .direction-presets-empty {
+          color: var(--secondary-text-color);
+          font-size: 0.72rem;
+          font-weight: 750;
+          padding: 0 6px;
+          white-space: nowrap;
         }
         .direction-presets-row::-webkit-scrollbar {
           display: none;
@@ -2271,13 +2503,33 @@ class HaDysonCard extends HTMLElement {
           pointer-events: none;
         }
         @media (max-width: 520px) {
-          .airflow-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 6px;
-          }
           .direction-chip {
             padding-inline: 6px;
             font-size: 0.7rem;
+          }
+          .wheel-speed {
+            right: -5px;
+          }
+          .speed-control,
+          .speed-slider,
+          .speed-slider::-webkit-slider-runnable-track,
+          .speed-slider::-webkit-slider-thumb,
+          .speed-slider::-moz-range-track,
+          .speed-slider::-moz-range-thumb {
+            width: 34px;
+          }
+          .speed-rail {
+            inset-inline: 4px;
+          }
+          .wheel-center-info {
+            width: 126px;
+            height: 126px;
+          }
+          .sweep-dial-option {
+            width: 31px;
+            height: 31px;
+            font-size: 0.54rem;
+            padding: 0 3px;
           }
           .timer-custom {
             grid-template-columns: 1fr 1fr;
@@ -2312,24 +2564,38 @@ class HaDysonCard extends HTMLElement {
               ${this._renderToggleButton("night", "Night", "mdi:weather-night", nightActive, !this._nightModeEntity())}
             </div>
 
-            <div class="airflow-row">
-              <div class="preset-row">
+            <div class="direction-row">
+              <div class="airflow-control">
                 <div class="row-label">
-                  <span>Sweep</span>
+                  <span>Airflow</span>
                 </div>
-                <select class="preset-select" aria-label="Set sweep preset">
-                  ${presetWidths.map((preset) => this._renderWidthOption(preset, bounds.width)).join("")}
-                </select>
+                <button class="direction-chip active" data-direction-toggle aria-label="Toggle airflow direction" ${airflowDirectionAvailable ? "" : "disabled"}>
+                  <ha-icon icon="${airflowDirection === "forward" ? "mdi:arrow-up-bold" : "mdi:arrow-down-bold"}"></ha-icon>
+                  <span>${airflowDirection === "forward" ? "Forward" : "Reverse"}</span>
+                </button>
               </div>
-
-              <div class="direction-row">
+              <div class="sleep-timer-control">
                 <div class="row-label">
-                  <span>Direction</span>
+                  <span>Sleep Timer</span>
                 </div>
-                <div class="direction-buttons">
-                  <button class="direction-chip ${airflowDirection === "forward" ? "active" : ""}" data-direction="forward" ${airflowDirectionAvailable ? "" : "disabled"}>Forward</button>
-                  <button class="direction-chip ${airflowDirection === "reverse" ? "active" : ""}" data-direction="reverse" ${airflowDirectionAvailable ? "" : "disabled"}>Reverse</button>
+                <div class="timer-inline-buttons">
+                  ${this._renderTimerButton(60, "1H", activeTimer)}
+                  ${this._renderTimerButton(180, "3H", activeTimer)}
+                  <button class="timer-chip timer-plus ${this._customTimerOpen ? "active" : ""}" data-timer-custom aria-label="Custom sleep timer">
+                    <ha-icon icon="mdi:plus"></ha-icon>
+                  </button>
                 </div>
+              </div>
+            </div>
+            <div class="timer-flyout" style="${this._customTimerOpen ? "" : "display:none;"}">
+              <div class="row-label">
+                <span>Sleep timer</span>
+                <strong>${timerLabel}</strong>
+              </div>
+              <div class="timer-custom">
+                <input class="timer-custom-input" type="number" min="1" max="9" step="1" inputmode="numeric" placeholder="Hours" />
+                <button class="timer-action" data-timer-set>Set</button>
+                <button class="timer-action" data-timer-cancel>Cancel</button>
               </div>
             </div>
           </div>
@@ -2352,38 +2618,25 @@ class HaDysonCard extends HTMLElement {
               </button>
               <button class="wheel-handle-hit" aria-label="Drag to set Dyson direction"></button>
               <div class="wheel-speed">
-                <ha-icon icon="mdi:fan"></ha-icon>
-                <input class="speed-slider" type="range" min="0" max="100" step="10" value="${speedPercent}" aria-label="Set airflow speed" ${speedAvailable ? "" : "disabled"} />
+                <div class="speed-control" style="--speed-fill: ${speedPercent}%;">
+                  <div class="speed-rail" aria-hidden="true"></div>
+                  <input class="speed-slider" type="range" min="0" max="100" step="10" value="${speedPercent}" aria-label="Set airflow speed" ${speedAvailable ? "" : "disabled"} />
+                </div>
                 <span class="speed-value">${speedPercent}%</span>
               </div>
-              <button class="timer-icon-button ${this._timerMenuOpen ? "active" : ""}" data-timer-toggle aria-label="Sleep timer ${this._escapeHtml(timerLabel)}">
-                <ha-icon icon="mdi:timer-outline"></ha-icon>
-              </button>
               <div class="wheel-sensor-strip">
                 <span class="sensor-temp"><ha-icon icon="mdi:thermometer"></ha-icon>${this._escapeHtml(temp || "—")}${temp ? this._escapeHtml(this._unit(this._temperatureEntity(), "\u00b0")) : ""}</span>
                 <span class="sensor-humidity"><ha-icon icon="mdi:water-percent"></ha-icon>${this._escapeHtml(humidity || "—")}${humidity ? this._escapeHtml(this._unit(this._humidityEntity(), "%")) : ""}</span>
                 <span class="sensor-voc ${vocTone}"><span class="voc-dot" aria-hidden="true"></span>VOC</span>
                 <span class="sensor-filter"><ha-icon icon="mdi:air-filter"></ha-icon>${filterPercent === null ? "—" : `${filterPercent}%`}</span>
               </div>
-              <div class="timer-flyout" style="${this._timerMenuOpen ? "" : "display:none;"}">
-                <div class="row-label">
-                  <span>Sleep timer</span>
-                  <strong>${timerLabel}</strong>
-                </div>
-                <div class="timer-buttons">
-                  ${this._renderTimerButton(60, "1H", activeTimer)}
-                  ${this._renderTimerButton(180, "3H", activeTimer)}
-                  <button class="timer-chip ${this._customTimerOpen ? "active" : ""}" data-timer-custom>Custom</button>
-                </div>
-                <div class="timer-custom" style="${this._customTimerOpen ? "" : "display:none;"}">
-                  <input class="timer-custom-input" type="number" min="1" max="9" step="1" inputmode="numeric" placeholder="Hours" />
-                  <button class="timer-action" data-timer-set>Set</button>
-                  <button class="timer-action" data-timer-cancel>Cancel</button>
-                </div>
-              </div>
               <div class="wheel-center-info">
-                <div class="center-angle">${bounds.center}\u00b0</div>
-                <div class="center-sweep">${bounds.width}\u00b0 sweep</div>
+                <div class="sweep-dial sweep-dial-active-${bounds.width}" aria-label="Sweep presets">
+                  ${presetWidths.map((preset) => this._renderSweepButton(preset, bounds.width, !controlReady)).join("")}
+                  <button class="snapshot-button ${this._presetEditorOpen ? "active" : ""}" data-preset-add aria-label="Save current direction, sweep, and airflow speed" ${controlReady ? "" : "disabled"}>
+                    <ha-icon icon="mdi:camera-plus-outline"></ha-icon>
+                  </button>
+                </div>
                 ${operationActive ? `<div class="center-operation">${this._escapeHtml(operationLabel)}</div>` : ""}
               </div>
             </div>
@@ -2407,7 +2660,7 @@ class HaDysonCard extends HTMLElement {
 
           </div>
 
-          ${this._renderDirectionPresets(direction, width, controlReady)}
+          ${this._renderDirectionPresets(direction, width, speedPercent, controlReady)}
 
           ${controlReady ? "" : `<div class="helper">This card is still resolving the related Dyson device and companion entities from the selected fan entity.</div>`}
         </div>

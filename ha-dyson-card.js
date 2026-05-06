@@ -94,6 +94,10 @@ class HaDysonCard extends HTMLElement {
     this._pendingSpeed = null;
     this._pendingSpeedSince = null;
     this._pendingSpeedTimer = null;
+    this._optimisticDirection = null;
+    this._optimisticWidth = null;
+    this._optimisticSince = null;
+    this._optimisticTimer = null;
     this._timerMenuOpen = false;
     this._customTimerOpen = false;
     this._presetEditorOpen = false;
@@ -115,6 +119,7 @@ class HaDysonCard extends HTMLElement {
     this._presetEditorOpen = false;
     this._clearPending(false);
     this._clearPendingSpeed(false);
+    this._clearOptimisticDirection(false);
     this._render();
   }
 
@@ -468,6 +473,10 @@ class HaDysonCard extends HTMLElement {
     return Number.isFinite(this._pendingSpeedSince) && Date.now() - this._pendingSpeedSince < 90000;
   }
 
+  _optimisticDirectionActive() {
+    return Number.isFinite(this._optimisticSince) && Date.now() - this._optimisticSince < 600000;
+  }
+
   _setPendingDirection(direction, width, label) {
     const bounds = this._boundsFromCenterWidth(direction, width);
     this._pendingDirection = bounds.center;
@@ -483,6 +492,20 @@ class HaDysonCard extends HTMLElement {
     }, 90000);
   }
 
+  _setOptimisticDirection(direction, width) {
+    const bounds = this._boundsFromCenterWidth(direction, width);
+    this._optimisticDirection = bounds.center;
+    this._optimisticWidth = bounds.width;
+    this._optimisticSince = Date.now();
+
+    if (this._optimisticTimer) {
+      clearTimeout(this._optimisticTimer);
+    }
+    this._optimisticTimer = setTimeout(() => {
+      this._clearOptimisticDirection();
+    }, 600000);
+  }
+
   _clearPending(render = true) {
     if (this._pendingTimer) {
       clearTimeout(this._pendingTimer);
@@ -492,6 +515,19 @@ class HaDysonCard extends HTMLElement {
     this._pendingWidth = null;
     this._pendingSince = null;
     this._pendingLabel = "";
+    if (render) {
+      this._render();
+    }
+  }
+
+  _clearOptimisticDirection(render = true) {
+    if (this._optimisticTimer) {
+      clearTimeout(this._optimisticTimer);
+      this._optimisticTimer = null;
+    }
+    this._optimisticDirection = null;
+    this._optimisticWidth = null;
+    this._optimisticSince = null;
     if (render) {
       this._render();
     }
@@ -523,10 +559,19 @@ class HaDysonCard extends HTMLElement {
 
   _anglesMatch(sourceDirection, sourceWidth) {
     if (!this._pendingActive()) return false;
-    const directionMatches = this._normalizeAngle(sourceDirection) === this._normalizeAngle(this._pendingDirection);
-    const sourceWidthMatches = this._normalizeAngle(sourceWidth) === this._normalizeAngle(this._pendingWidth);
+    return this._directionWidthMatches(
+      this._pendingDirection,
+      this._pendingWidth,
+      sourceDirection,
+      sourceWidth
+    );
+  }
+
+  _directionWidthMatches(targetDirection, targetWidth, sourceDirection, sourceWidth) {
+    const directionMatches = this._normalizeAngle(sourceDirection) === this._normalizeAngle(targetDirection);
+    const sourceWidthMatches = this._normalizeAngle(sourceWidth) === this._normalizeAngle(targetWidth);
     const selectWidth = this._selectSweepWidth();
-    const selectWidthMatches = selectWidth !== null && this._normalizeAngle(selectWidth) === this._normalizeAngle(this._pendingWidth);
+    const selectWidthMatches = selectWidth !== null && this._normalizeAngle(selectWidth) === this._normalizeAngle(targetWidth);
     return directionMatches && (sourceWidthMatches || selectWidthMatches);
   }
 
@@ -538,6 +583,16 @@ class HaDysonCard extends HTMLElement {
       this._clearPendingSpeed(false);
     } else if (!this._pendingSpeedActive() && this._pendingSpeedSince !== null) {
       this._clearPendingSpeed(false);
+    }
+
+    if (this._optimisticDirectionActive() && fan) {
+      const sourceDirection = this._sourceDirection(attributes);
+      const sourceWidth = this._sourceWidth(attributes);
+      if (this._directionWidthMatches(this._optimisticDirection, this._optimisticWidth, sourceDirection, sourceWidth)) {
+        this._clearOptimisticDirection(false);
+      }
+    } else if (!this._optimisticDirectionActive() && this._optimisticSince !== null) {
+      this._clearOptimisticDirection(false);
     }
 
     if (!this._pendingActive()) {
@@ -572,6 +627,9 @@ class HaDysonCard extends HTMLElement {
     if (this._pendingActive() && Number.isFinite(this._pendingWidth)) {
       return this._normalizeAngle(this._pendingWidth);
     }
+    if (this._optimisticDirectionActive() && Number.isFinite(this._optimisticWidth)) {
+      return this._normalizeAngle(this._optimisticWidth);
+    }
     return this._sourceWidth(attributes);
   }
 
@@ -581,6 +639,9 @@ class HaDysonCard extends HTMLElement {
     }
     if (this._pendingActive() && Number.isFinite(this._pendingDirection)) {
       return this._normalizeAngle(this._pendingDirection);
+    }
+    if (this._optimisticDirectionActive() && Number.isFinite(this._optimisticDirection)) {
+      return this._normalizeAngle(this._optimisticDirection);
     }
     return this._sourceDirection(attributes);
   }
@@ -1195,17 +1256,24 @@ class HaDysonCard extends HTMLElement {
     const bounds = this._boundsFromCenterWidth(direction, width);
     const { lower, upper, center, width: normalizedWidth } = bounds;
     const directMode = normalizedWidth === 0;
+    const fanOn = this._stateObj(this._config.entity)?.state === "on";
 
     this._busy = true;
-    this._setPendingDirection(center, normalizedWidth, directMode ? "Pointing fan" : "Applying angle");
+    if (fanOn) {
+      this._setPendingDirection(center, normalizedWidth, directMode ? "Pointing fan" : "Applying angle");
+    } else {
+      this._setOptimisticDirection(center, normalizedWidth);
+    }
     this._render();
 
     try {
       if (directMode) {
-        await this._hass.callService("fan", "oscillate", {
-          entity_id: this._config.entity,
-          oscillating: false,
-        });
+        if (fanOn) {
+          await this._hass.callService("fan", "oscillate", {
+            entity_id: this._config.entity,
+            oscillating: false,
+          });
+        }
         await this._hass.callService("hass_dyson", "set_oscillation_angles", {
           device_id: deviceId,
           lower_angle: center,
@@ -1216,23 +1284,28 @@ class HaDysonCard extends HTMLElement {
           entity_id: this._oscillationCenterEntity(),
           value: center,
         });
-        await this._hass.callService("fan", "oscillate", {
-          entity_id: this._config.entity,
-          oscillating: true,
-        });
+        if (fanOn) {
+          await this._hass.callService("fan", "oscillate", {
+            entity_id: this._config.entity,
+            oscillating: true,
+          });
+        }
       } else {
         await this._hass.callService("hass_dyson", "set_oscillation_angles", {
           device_id: deviceId,
           lower_angle: lower,
           upper_angle: upper,
         });
-        await this._hass.callService("fan", "oscillate", {
-          entity_id: this._config.entity,
-          oscillating: true,
-        });
+        if (fanOn) {
+          await this._hass.callService("fan", "oscillate", {
+            entity_id: this._config.entity,
+            oscillating: true,
+          });
+        }
       }
     } catch (error) {
       this._clearPending(false);
+      this._clearOptimisticDirection(false);
       throw error;
     } finally {
       this._busy = false;
@@ -1515,20 +1588,28 @@ class HaDysonCard extends HTMLElement {
     const option = `${normalizedWidth}\u00b0`;
     const options = this._stateObj(selectEntity)?.attributes?.options || [];
     if (selectEntity && options.includes(option)) {
+      const fanOn = this._stateObj(this._config.entity)?.state === "on";
       this._busy = true;
-      this._setPendingDirection(direction, normalizedWidth, `Applying ${option} sweep`);
+      if (fanOn) {
+        this._setPendingDirection(direction, normalizedWidth, `Applying ${option} sweep`);
+      } else {
+        this._setOptimisticDirection(direction, normalizedWidth);
+      }
       this._render();
       try {
         await this._hass.callService("select", "select_option", {
           entity_id: selectEntity,
           option,
         });
-        await this._hass.callService("fan", "oscillate", {
-          entity_id: this._config.entity,
-          oscillating: true,
-        });
+        if (fanOn) {
+          await this._hass.callService("fan", "oscillate", {
+            entity_id: this._config.entity,
+            oscillating: true,
+          });
+        }
       } catch (error) {
         this._clearPending(false);
+        this._clearOptimisticDirection(false);
         throw error;
       } finally {
         this._busy = false;

@@ -1888,7 +1888,7 @@ class HaDysonCard extends HTMLElement {
         }
         .control-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 6px;
         }
         .control-pill,
@@ -2111,12 +2111,12 @@ class HaDysonCard extends HTMLElement {
         .wheel-speed {
           position: absolute;
           right: -4px;
-          top: 42px;
-          bottom: 42px;
+          top: 34px;
+          bottom: 30px;
           display: grid;
-          grid-template-rows: minmax(0, 1fr) auto;
+          grid-template-rows: minmax(0, 1fr) auto auto;
           justify-items: center;
-          gap: 8px;
+          gap: 6px;
           color: var(--secondary-text-color);
           font-size: 0.66rem;
           font-weight: 800;
@@ -2131,7 +2131,7 @@ class HaDysonCard extends HTMLElement {
           --speed-fill: ${speedPercent}%;
           position: relative;
           width: 38px;
-          height: 196px;
+          height: 180px;
           display: grid;
           place-items: center;
           border-radius: 999px;
@@ -2170,7 +2170,7 @@ class HaDysonCard extends HTMLElement {
           position: relative;
           z-index: 1;
           width: 38px;
-          height: 196px;
+          height: 180px;
           writing-mode: vertical-lr;
           direction: rtl;
           touch-action: none;
@@ -2182,7 +2182,7 @@ class HaDysonCard extends HTMLElement {
         }
         .speed-slider::-webkit-slider-runnable-track {
           width: 38px;
-          height: 196px;
+          height: 180px;
           background: transparent;
           border: 0;
         }
@@ -2197,7 +2197,7 @@ class HaDysonCard extends HTMLElement {
         }
         .speed-slider::-moz-range-track {
           width: 38px;
-          height: 196px;
+          height: 180px;
           background: transparent;
           border: 0;
         }
@@ -2218,6 +2218,26 @@ class HaDysonCard extends HTMLElement {
           text-align: center;
           font-size: 0.58rem;
           line-height: 1;
+        }
+        .speed-power-button {
+          width: 42px;
+          height: 32px;
+          border: 1px solid var(--dyson-soft-border);
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          background: var(--dyson-pill-bg);
+          color: var(--primary-text-color);
+          box-shadow: var(--dyson-inner-highlight);
+        }
+        .speed-power-button.active {
+          border-color: color-mix(in srgb, var(--primary-color, #4f46e5) 34%, transparent);
+          background: var(--dyson-active-bg);
+        }
+        .speed-power-button ha-icon {
+          --mdc-icon-size: 18px;
         }
         .timer-flyout {
           position: relative;
@@ -2908,10 +2928,6 @@ class HaDysonCard extends HTMLElement {
 
           <div class="control-panel">
             <div class="control-grid">
-              <button class="control-pill power-button ${powerState === "On" ? "active" : ""}">
-                <ha-icon icon="mdi:power"></ha-icon>
-                <span>${powerState === "On" ? "On" : "Off"}</span>
-              </button>
               ${this._renderToggleButton("auto", "Auto", "mdi:auto-mode", autoActive, !autoAvailable)}
               ${this._renderToggleButton("night", "Night", "mdi:weather-night", nightActive, !this._nightModeEntity())}
             </div>
@@ -2975,6 +2991,9 @@ class HaDysonCard extends HTMLElement {
                   <input class="speed-slider" type="range" min="0" max="100" step="10" value="${speedPercent}" aria-label="Set airflow speed" ${speedAvailable ? "" : "disabled"} />
                 </div>
                 <span class="speed-value">${speedPercent}%</span>
+                <button class="speed-power-button power-button ${powerState === "On" ? "active" : ""}" aria-label="${powerState === "On" ? "Turn Dyson off" : "Turn Dyson on"}">
+                  <ha-icon icon="mdi:power"></ha-icon>
+                </button>
               </div>
               <div class="wheel-sensor-strip">
                 <span class="sensor-temp"><ha-icon icon="mdi:thermometer"></ha-icon>${this._escapeHtml(temp || "—")}${temp ? this._escapeHtml(this._unit(this._temperatureEntity(), "\u00b0")) : ""}</span>

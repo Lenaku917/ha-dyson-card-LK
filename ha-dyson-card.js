@@ -233,6 +233,38 @@ class HaDysonCard extends HTMLElement {
     return Number.isFinite(value) ? value : null;
   }
 
+  _parseSweepWidth(value) {
+    const text = String(value ?? "").trim();
+    if (!text || ["unknown", "unavailable"].includes(text.toLowerCase())) {
+      return null;
+    }
+    if (/\b(direct|off|none)\b/i.test(text)) {
+      return 0;
+    }
+    const match = text.match(/(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const width = Number(match[1]);
+    if (!Number.isFinite(width)) return null;
+    return this._normalizeAngle(width);
+  }
+
+  _selectSweepWidth() {
+    const stateObj = this._stateObj(this._oscillationSelectEntity());
+    if (!stateObj) return null;
+    const attributes = stateObj.attributes || {};
+    const candidates = [
+      stateObj.state,
+      attributes.current_option,
+      attributes.selected_option,
+      attributes.option,
+    ];
+    for (const candidate of candidates) {
+      const parsed = this._parseSweepWidth(candidate);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  }
+
   _deviceId() {
     return this._derived?.deviceId || "";
   }
@@ -487,8 +519,11 @@ class HaDysonCard extends HTMLElement {
 
   _anglesMatch(sourceDirection, sourceWidth) {
     if (!this._pendingActive()) return false;
-    return this._normalizeAngle(sourceDirection) === this._normalizeAngle(this._pendingDirection)
-      && this._normalizeAngle(sourceWidth) === this._normalizeAngle(this._pendingWidth);
+    const directionMatches = this._normalizeAngle(sourceDirection) === this._normalizeAngle(this._pendingDirection);
+    const sourceWidthMatches = this._normalizeAngle(sourceWidth) === this._normalizeAngle(this._pendingWidth);
+    const selectWidth = this._selectSweepWidth();
+    const selectWidthMatches = selectWidth !== null && this._normalizeAngle(selectWidth) === this._normalizeAngle(this._pendingWidth);
+    return directionMatches && (sourceWidthMatches || selectWidthMatches);
   }
 
   _reconcilePendingState() {

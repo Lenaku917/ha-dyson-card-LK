@@ -1871,33 +1871,35 @@ class HaDysonCard extends HTMLElement {
           place-items: center;
           border-radius: 999px;
           touch-action: none;
-          filter: drop-shadow(0 7px 14px color-mix(in srgb, #000 12%, transparent));
+          filter: drop-shadow(0 5px 12px color-mix(in srgb, #000 10%, transparent));
         }
         .speed-rail {
           position: absolute;
           inset: 0 5px;
           overflow: hidden;
           border-radius: 999px;
-          border: 1px solid color-mix(in srgb, var(--primary-text-color) 9%, transparent);
+          border: 0;
           background:
             linear-gradient(
               to top,
-              color-mix(in srgb, var(--primary-color, #03a9f4) 78%, white 10%) 0 var(--speed-fill),
-              color-mix(in srgb, var(--dyson-inset-bg) 82%, var(--primary-text-color) 5%) var(--speed-fill) 100%
+              color-mix(in srgb, var(--primary-color, #03a9f4) 86%, #00bcd4 14%) 0 var(--speed-fill),
+              color-mix(in srgb, var(--primary-color, #03a9f4) 18%, var(--card-background-color, #fff) 82%) var(--speed-fill) 100%
             );
-          box-shadow:
-            inset 0 2px 5px color-mix(in srgb, #000 18%, transparent),
-            inset 0 -1px 0 color-mix(in srgb, white 18%, transparent);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 12%, transparent);
           pointer-events: none;
         }
         .speed-rail::after {
           content: "";
           position: absolute;
-          inset: 0;
-          background:
-            linear-gradient(to right, color-mix(in srgb, white 28%, transparent), transparent 42%),
-            linear-gradient(to bottom, color-mix(in srgb, white 22%, transparent), transparent 24%);
-          opacity: 0.42;
+          left: 50%;
+          bottom: var(--speed-fill);
+          width: 18px;
+          height: 3px;
+          transform: translate(-50%, 50%);
+          border-radius: 999px;
+          background: color-mix(in srgb, white 92%, transparent);
+          box-shadow: 0 1px 3px color-mix(in srgb, #000 14%, transparent);
+          opacity: ${speedPercent > 5 && speedPercent < 95 ? "1" : "0"};
         }
         .speed-slider {
           position: relative;
@@ -1983,13 +1985,12 @@ class HaDysonCard extends HTMLElement {
           --mdc-icon-size: 19px;
         }
         .wheel-core {
-          fill: color-mix(in srgb, var(--card-background-color, #ffffff) 88%, #000 12%);
-          stroke: color-mix(in srgb, var(--primary-text-color, #111) 12%, transparent);
-          stroke-width: 2;
+          fill: transparent;
+          stroke: none;
           pointer-events: none;
         }
         .wheel-core-inner {
-          fill: color-mix(in srgb, var(--card-background-color, #ffffff) 92%, #000 8%);
+          fill: transparent;
           pointer-events: none;
         }
         .wheel-spinner {
@@ -2081,11 +2082,9 @@ class HaDysonCard extends HTMLElement {
           width: 100%;
           height: 100%;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--primary-text-color) 4%, transparent);
-          border: 1px solid color-mix(in srgb, var(--primary-text-color) 8%, transparent);
-          box-shadow:
-            inset 0 1px 1px color-mix(in srgb, white 20%, transparent),
-            0 8px 24px color-mix(in srgb, #000 10%, transparent);
+          background: transparent;
+          border: 0;
+          box-shadow: none;
           --sweep-start: 0deg;
           --sweep-size: 72deg;
         }
@@ -2107,36 +2106,11 @@ class HaDysonCard extends HTMLElement {
         .sweep-dial::before {
           content: "";
           position: absolute;
-          inset: 10px;
+          inset: 17px;
           border-radius: 999px;
-          background:
-            radial-gradient(circle at center, transparent 0 39px, color-mix(in srgb, var(--card-background-color, #fff) 74%, transparent) 40px 53px, transparent 54px),
-            conic-gradient(
-              from var(--sweep-start),
-              color-mix(in srgb, var(--primary-color, #03a9f4) 30%, transparent) 0 var(--sweep-size),
-              transparent var(--sweep-size) 360deg
-            ),
-            repeating-conic-gradient(
-              from -36deg,
-              color-mix(in srgb, var(--primary-text-color) 14%, transparent) 0 1deg,
-              transparent 1deg 72deg
-            ),
-            color-mix(in srgb, var(--card-background-color, #fff) 72%, transparent);
-          border: 1px solid color-mix(in srgb, var(--primary-text-color) 8%, transparent);
-          box-shadow:
-            inset 0 1px 2px color-mix(in srgb, white 18%, transparent),
-            inset 0 -1px 2px color-mix(in srgb, #000 7%, transparent);
-        }
-        .sweep-dial::after {
-          content: "";
-          position: absolute;
-          inset: 42px;
-          border-radius: 999px;
-          background:
-            radial-gradient(circle at 50% 28%, color-mix(in srgb, white 16%, transparent), transparent 42%),
-            color-mix(in srgb, var(--card-background-color, #fff) 92%, transparent);
           border: 1px solid color-mix(in srgb, var(--primary-text-color) 7%, transparent);
-          box-shadow: 0 2px 9px color-mix(in srgb, #000 10%, transparent);
+          background: transparent;
+          box-shadow: none;
         }
         .sweep-dial-option,
         .snapshot-button {
@@ -2168,10 +2142,8 @@ class HaDysonCard extends HTMLElement {
           align-items: center;
           justify-content: center;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--card-background-color, #fff) 88%, transparent);
-          box-shadow:
-            0 1px 3px color-mix(in srgb, #000 9%, transparent),
-            inset 0 0 0 1px color-mix(in srgb, var(--primary-text-color) 8%, transparent);
+          background: color-mix(in srgb, var(--card-background-color, #fff) 96%, transparent);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-text-color) 8%, transparent);
         }
         .sweep-dial-option--0 {
           left: 50%;
@@ -2196,9 +2168,7 @@ class HaDysonCard extends HTMLElement {
         .sweep-dial-option.active span {
           background: var(--dyson-active-bg);
           color: var(--primary-text-color);
-          box-shadow:
-            0 2px 6px color-mix(in srgb, var(--primary-color, #03a9f4) 18%, transparent),
-            inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 22%, transparent);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 24%, transparent);
         }
         .snapshot-button.active {
           background: var(--dyson-active-bg);
@@ -2215,8 +2185,8 @@ class HaDysonCard extends HTMLElement {
           align-items: center;
           justify-content: center;
           border: 1px solid var(--dyson-soft-border);
-          background: var(--dyson-pill-bg);
-          box-shadow: var(--dyson-inner-highlight);
+          background: color-mix(in srgb, var(--card-background-color, #fff) 94%, transparent);
+          box-shadow: none;
           z-index: 2;
         }
         .snapshot-button ha-icon {

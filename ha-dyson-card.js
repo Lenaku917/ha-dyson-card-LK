@@ -994,10 +994,26 @@ class HaDysonCard extends HTMLElement {
   _renderDirectionPresets(direction, width, speed, controlReady) {
     const presets = this._directionPresets();
     const disabled = controlReady ? "" : "disabled";
+    const iconChoices = [
+      "mdi:crosshairs-gps",
+      "mdi:bed",
+      "mdi:sofa",
+      "mdi:desk",
+      "mdi:television",
+      "mdi:table-chair",
+      "mdi:door-open",
+      "mdi:account",
+    ];
     const editor = this._presetEditorOpen ? `
       <div class="preset-editor">
         <input class="preset-name-input" type="text" placeholder="Name" aria-label="Preset name" />
-        <input class="preset-icon-input" type="text" placeholder="mdi:bed" aria-label="Preset icon" />
+        <div class="preset-icon-picker" role="radiogroup" aria-label="Preset icon">
+          ${iconChoices.map((icon, index) => `
+            <button class="preset-icon-option ${index === 0 ? "active" : ""}" data-preset-icon="${this._escapeHtml(icon)}" type="button" role="radio" aria-checked="${index === 0 ? "true" : "false"}" aria-label="${this._escapeHtml(icon.replace("mdi:", "").replaceAll("-", " "))}">
+              <ha-icon icon="${this._escapeHtml(icon)}"></ha-icon>
+            </button>
+          `).join("")}
+        </div>
         <button class="preset-action" data-preset-save>Save</button>
         <button class="preset-action" data-preset-cancel>Cancel</button>
       </div>
@@ -1614,9 +1630,18 @@ class HaDysonCard extends HTMLElement {
       this._render();
     });
 
+    this.shadowRoot?.querySelectorAll("[data-preset-icon]")?.forEach((button) => {
+      button.addEventListener("click", () => {
+        this.shadowRoot?.querySelectorAll("[data-preset-icon]")?.forEach((candidate) => {
+          candidate.classList.toggle("active", candidate === button);
+          candidate.setAttribute("aria-checked", candidate === button ? "true" : "false");
+        });
+      });
+    });
+
     this.shadowRoot?.querySelector("[data-preset-save]")?.addEventListener("click", () => {
       const name = this.shadowRoot?.querySelector(".preset-name-input")?.value;
-      const icon = this.shadowRoot?.querySelector(".preset-icon-input")?.value;
+      const icon = this.shadowRoot?.querySelector("[data-preset-icon].active")?.dataset?.presetIcon || "mdi:crosshairs-gps";
       this._addDirectionPreset(
         name,
         icon,
@@ -1744,8 +1769,6 @@ class HaDysonCard extends HTMLElement {
     const temp = this._stateValue(this._temperatureEntity(), "");
     const humidity = this._stateValue(this._humidityEntity(), "");
     const aqi = this._sensorDetailItem("AQI", ["aqi", "air_quality", "air quality"])?.value || "";
-    const voc = this._displayState(this._vocEntity(), "");
-    const vocTone = voc ? this._qualityTone(this._qualityLabel(voc)) : "neutral";
     const speedPercent = this._currentSpeed(attributes);
     const filterPercent = this._filterPercent();
     const timerLabel = this._timerLabel(attributes);
@@ -2259,24 +2282,27 @@ class HaDysonCard extends HTMLElement {
         }
         .wheel-sensor-strip {
           position: absolute;
-          left: 0;
-          right: 46px;
+          left: 50%;
+          right: auto;
           top: 4px;
+          width: max-content;
+          max-width: calc(100% - 14px);
+          transform: translateX(-50%);
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          justify-content: flex-start;
-          gap: 3px;
+          justify-content: center;
+          gap: 5px;
           padding: 0;
           border-radius: 0;
           background: transparent;
           border: 0;
           pointer-events: auto;
           color: var(--secondary-text-color);
-          font-size: 0.54rem;
+          font-size: 0.68rem;
           font-weight: 760;
           line-height: 1;
-          z-index: 4;
+          z-index: 8;
         }
         .wheel-sensor-strip:not(.expanded) {
           flex-wrap: nowrap;
@@ -2291,19 +2317,19 @@ class HaDysonCard extends HTMLElement {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 2px;
-          min-height: 20px;
-          padding: 3px 5px;
+          gap: 3px;
+          min-height: 27px;
+          padding: 5px 9px;
           border: 1px solid var(--dyson-soft-border);
           border-radius: 999px;
           background: color-mix(in srgb, var(--primary-color, #03a9f4) 9%, var(--dyson-pill-bg));
           color: var(--primary-text-color);
           font: inherit;
-          font-size: 0.55rem;
+          font-size: 0.66rem;
           line-height: 1;
         }
         .sensor-more-button ha-icon {
-          --mdc-icon-size: 9px;
+          --mdc-icon-size: 13px;
         }
         .sensor-more-button.active {
           border-color: transparent;
@@ -2311,22 +2337,21 @@ class HaDysonCard extends HTMLElement {
           color: var(--primary-color, #03a9f4);
         }
         .wheel-sensor-strip ha-icon {
-          --mdc-icon-size: 10px;
+          --mdc-icon-size: 14px;
         }
         .sensor-temp,
         .sensor-humidity,
         .sensor-aqi,
-        .sensor-voc,
         .sensor-filter {
           display: inline-grid;
-          grid-template-columns: 10px auto;
+          grid-template-columns: 14px auto;
           align-items: center;
           justify-content: start;
           gap: 3px;
           min-width: 0;
           flex: 0 0 auto;
-          min-height: 20px;
-          padding: 3px 5px;
+          min-height: 27px;
+          padding: 5px 9px;
           border: 1px solid var(--dyson-soft-border);
           border-radius: 999px;
           background: var(--dyson-raised-bg);
@@ -2339,25 +2364,8 @@ class HaDysonCard extends HTMLElement {
         .sensor-temp ha-icon,
         .sensor-humidity ha-icon,
         .sensor-aqi ha-icon,
-        .sensor-filter ha-icon,
-        .voc-dot {
+        .sensor-filter ha-icon {
           justify-self: center;
-        }
-        .voc-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--secondary-text-color) 42%, transparent);
-          box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-background-color, #fff) 78%, transparent);
-        }
-        .sensor-voc.good .voc-dot {
-          background: #22c55e;
-        }
-        .sensor-voc.fair .voc-dot {
-          background: #f59e0b;
-        }
-        .sensor-voc.poor .voc-dot {
-          background: #ef4444;
         }
         .sensor-details-panel {
           display: grid;
@@ -2432,7 +2440,7 @@ class HaDysonCard extends HTMLElement {
         .wheel-center-info {
           position: absolute;
           left: 50%;
-          top: 50%;
+          top: calc(50% + 14px);
           transform: translate(-50%, -50%);
           width: 152px;
           height: 152px;
@@ -2777,12 +2785,11 @@ class HaDysonCard extends HTMLElement {
         }
         .preset-editor {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+          grid-template-columns: minmax(0, 1fr) auto auto;
           gap: 6px;
           align-items: center;
         }
-        .preset-name-input,
-        .preset-icon-input {
+        .preset-name-input {
           min-width: 0;
           height: 34px;
           border: 1px solid var(--dyson-border);
@@ -2793,6 +2800,35 @@ class HaDysonCard extends HTMLElement {
           font: inherit;
           font-size: 0.74rem;
           font-weight: 750;
+        }
+        .preset-icon-picker {
+          grid-column: 1 / -1;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+        }
+        .preset-icon-option {
+          width: 34px;
+          height: 34px;
+          border: 1px solid var(--dyson-border);
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          background: var(--dyson-raised-bg);
+          color: var(--secondary-text-color);
+          box-shadow: var(--dyson-inner-highlight);
+        }
+        .preset-icon-option.active {
+          border-color: color-mix(in srgb, var(--primary-color, #4f46e5) 36%, transparent);
+          background: var(--dyson-active-bg);
+          color: var(--primary-color, #03a9f4);
+        }
+        .preset-icon-option ha-icon {
+          --mdc-icon-size: 18px;
         }
         .preset-action {
           height: 34px;
@@ -2905,7 +2941,7 @@ class HaDysonCard extends HTMLElement {
             grid-template-columns: 1fr 1fr;
           }
           .preset-name-input,
-          .preset-icon-input {
+          .preset-icon-picker {
             grid-column: 1 / -1;
           }
         }
@@ -2995,7 +3031,6 @@ class HaDysonCard extends HTMLElement {
                 <span class="sensor-temp"><ha-icon icon="mdi:thermometer"></ha-icon>${this._escapeHtml(temp || "—")}${temp ? this._escapeHtml(this._unit(this._temperatureEntity(), "\u00b0")) : ""}</span>
                 <span class="sensor-humidity"><ha-icon icon="mdi:water-percent"></ha-icon>${this._escapeHtml(humidity || "—")}${humidity ? this._escapeHtml(this._unit(this._humidityEntity(), "%")) : ""}</span>
                 <span class="sensor-aqi"><ha-icon icon="mdi:gauge"></ha-icon>${this._escapeHtml(aqi || "—")}</span>
-                <span class="sensor-voc ${vocTone}"><span class="voc-dot" aria-hidden="true"></span>VOC</span>
                 <span class="sensor-filter"><ha-icon icon="mdi:air-filter"></ha-icon>${filterPercent === null ? "—" : `${filterPercent}%`}</span>
                 ${sensorDetailGroups.length ? `
                   <button class="sensor-more-button ${this._sensorDetailsOpen ? "active" : ""}" data-sensor-more aria-label="${this._sensorDetailsOpen ? "Hide sensor details" : "Show more sensors"}">

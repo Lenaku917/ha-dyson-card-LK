@@ -1,7 +1,7 @@
 # HA Dyson Card
 
 <p align="center">
-  <img src=".github/images/ha-dyson-card-readme.svg" alt="HA Dyson Card" width="180">
+  <img src=".github/images/ha-dyson-card-icon.jpg" alt="HA Dyson Card" width="180">
 </p>
 
 <p align="center">

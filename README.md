@@ -31,7 +31,7 @@ The default Home Assistant entity cards can control a Dyson device, but the expe
 
 HA Dyson Card pulls the useful pieces into one mobile-friendly control surface: direction aiming, sweep presets, airflow speed, power, auto/night mode, heat controls, filter life, and air-quality readings.
 
-The goal is simple: make the Dyson feel like a polished Home Assistant appliance control instead of a collection of separate toggles and sensors.
+The goal is to make the Dyson feel like a polished Home Assistant appliance control instead of a collection of separate toggles and sensors.
 
 ## Highlights
 

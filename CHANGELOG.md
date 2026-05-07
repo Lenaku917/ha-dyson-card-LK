@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## 0.1.0 - 2026-05-07
+
 - Prepare the dashboard card repository for HACS custom repository use.
 - Document HACS Dashboard installation, manual installation, quick-start YAML, controls, sensors, entity discovery, compatibility, and troubleshooting.
 - Add HACS-style README badges and repository artwork.

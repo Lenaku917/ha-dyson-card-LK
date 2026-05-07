@@ -86,7 +86,7 @@ Optional fields:
 type: custom:ha-dyson-card
 entity: fan.my_dyson
 title: Bedroom Dyson
-default_oscillation_angle: 90
+airflow_control_side: right
 ```
 
 ## Configuration
@@ -95,7 +95,7 @@ default_oscillation_angle: 90
 | --- | --- | --- | --- | --- |
 | `entity` | string | yes | none | Dyson `fan.` entity from `hass_dyson`. |
 | `title` | string | no | empty | Optional card title. If empty, no header title is rendered. |
-| `default_oscillation_angle` | number | no | `90` | Fallback sweep width when the current Dyson sweep width cannot be derived from live state. |
+| `airflow_control_side` | `right` or `left` | no | `right` | Places the vertical airflow speed control on the right or left side of the direction wheel. |
 
 ## Controls
 
@@ -145,7 +145,15 @@ Each snapshot stores:
 - sweep width
 - airflow speed when available
 
-The snapshot delete flow is confirmation-based: first tap arms the pill as `DELETE`, second tap confirms.
+Snapshots are saved in the browser's `localStorage` under a key scoped to the configured fan entity:
+
+```text
+ha-dyson-card:direction-presets:<fan entity>
+```
+
+Because this is browser-local storage, snapshots persist on the same browser/device but do not automatically sync to other Home Assistant clients.
+
+The snapshot delete flow is confirmation-based: first tap arms the pill as `DELETE`, second tap on the red `DELETE` pill confirms. Tapping elsewhere cancels the armed delete state.
 
 ## Entity Discovery
 

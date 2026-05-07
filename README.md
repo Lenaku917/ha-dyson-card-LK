@@ -4,32 +4,40 @@
   <img src=".github/images/ha-dyson-card-readme.svg" alt="HA Dyson Card" width="180">
 </p>
 
-[![Release](https://img.shields.io/github/v/release/thanhn062/ha-dyson-card?style=for-the-badge)](https://github.com/thanhn062/ha-dyson-card/releases)
-[![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=for-the-badge)](https://github.com/thanhn062/ha-dyson-card/blob/main/LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Dashboard-41BDF5.svg?style=for-the-badge)](https://www.hacs.xyz/docs/use/repositories/type/dashboard/)
-[![Validate](https://img.shields.io/github/actions/workflow/status/thanhn062/ha-dyson-card/validate.yaml?branch=main&style=for-the-badge&label=validate)](https://github.com/thanhn062/ha-dyson-card/actions/workflows/validate.yaml)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.8.0-blue.svg?style=for-the-badge&logo=home-assistant)](https://www.home-assistant.io/)
+<p align="center">
+  <a href="https://github.com/thanhn062/ha-dyson-card/releases"><img alt="Release" src="https://img.shields.io/github/v/release/thanhn062/ha-dyson-card?style=for-the-badge"></a>
+  <a href="https://github.com/thanhn062/ha-dyson-card/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/thanhn062/ha-dyson-card/total?style=for-the-badge"></a>
+  <a href="https://github.com/thanhn062/ha-dyson-card/actions/workflows/validate.yaml"><img alt="Validate" src="https://img.shields.io/github/actions/workflow/status/thanhn062/ha-dyson-card/validate.yaml?branch=main&style=for-the-badge&label=validate"></a>
+  <a href="https://www.hacs.xyz/docs/use/repositories/type/dashboard/"><img alt="HACS Dashboard" src="https://img.shields.io/badge/HACS-Dashboard-41BDF5.svg?style=for-the-badge"></a>
+  <a href="https://www.home-assistant.io/"><img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.8.0-blue.svg?style=for-the-badge&logo=home-assistant"></a>
+  <a href="https://github.com/cmgrayb/hass-dyson"><img alt="hass_dyson" src="https://img.shields.io/badge/Requires-hass__dyson-00A3E0.svg?style=for-the-badge"></a>
+  <a href="https://github.com/thanhn062/ha-dyson-card/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=for-the-badge"></a>
+  <img alt="Repo size" src="https://img.shields.io/github/repo-size/thanhn062/ha-dyson-card?style=for-the-badge">
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/thanhn062/ha-dyson-card?style=for-the-badge">
+</p>
 
-`HA Dyson Card` is a standalone Lovelace dashboard card for Dyson fans, purifiers, and heater fans exposed through [`hass_dyson`](https://github.com/cmgrayb/hass-dyson).
+`HA Dyson Card` is a standalone Lovelace dashboard card for Dyson fans, purifiers, humidifiers, and heater fans exposed through [`hass_dyson`](https://github.com/cmgrayb/hass-dyson).
 
-This repository contains only the frontend dashboard card. It does not replace the Dyson integration; it uses the entities and services exposed by `hass_dyson`.
+This repository contains only the frontend dashboard card. It does not replace the Dyson integration; it uses the fan, climate, switch, select, number, and sensor entities that `hass_dyson` exposes in Home Assistant.
 
-## Features
+## Highlights
 
 - Direction wheel with drag-to-aim control
 - Sweep dial presets for direct, 45°, 90°, 180°, and wide sweep
 - Saved direction snapshots with icon, name, direction, sweep, and airflow speed
-- Compact sensor badges for temperature, humidity, AQI, and filter life
+- Compact top sensor badges for temperature, humidity, AQI, and filter life
 - Expandable air-quality details for AQI, PM2.5, PM10, VOC, and NO2 when available
 - Auto, night mode, airflow direction, sleep timer, fan speed, power, heat, fan-only, and target temperature controls
 - Companion entity discovery from the selected Dyson fan entity
 - Home Assistant theme-aware light and dark styling
+- HACS Dashboard/plugin repository shape
 
 ## Requirements
 
 - Home Assistant 2024.8.0 or newer
 - [`hass_dyson`](https://github.com/cmgrayb/hass-dyson) installed and configured
 - A Dyson `fan.` entity from that integration
+- Related Dyson entities should be attached to the same Home Assistant device as the selected fan
 
 ## HACS Install
 
@@ -42,6 +50,26 @@ Default HACS inclusion is pending. For now, add this repository as a custom repo
 5. Refresh or reopen Home Assistant so the dashboard resource is loaded
 
 HACS installs dashboard elements under `www/community/` and serves them through `/hacsfiles/`.
+
+## Manual Install
+
+Download `ha-dyson-card.js` and place it in:
+
+```text
+config/www/community/ha-dyson-card/ha-dyson-card.js
+```
+
+Then add a dashboard resource:
+
+```text
+/local/community/ha-dyson-card/ha-dyson-card.js
+```
+
+Resource type:
+
+```text
+JavaScript module
+```
 
 ## Quick Start
 
@@ -61,14 +89,115 @@ title: Bedroom Dyson
 default_oscillation_angle: 90
 ```
 
-## Notes
+## Configuration
 
-- The card derives related Dyson entities from the selected fan's Home Assistant device.
-- Direction and sweep controls use the Dyson angle services exposed by `hass_dyson` when available.
-- Fan speed and airflow direction use the fan entity's standard Home Assistant services.
-- Sleep timer uses the `hass_dyson.set_sleep_timer` service.
-- Heat and target temperature controls appear when a related Dyson climate entity is available.
-- `default_oscillation_angle` is only used as a fallback when the live sweep width cannot be derived from Home Assistant.
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `entity` | string | yes | none | Dyson `fan.` entity from `hass_dyson`. |
+| `title` | string | no | empty | Optional card title. If empty, no header title is rendered. |
+| `default_oscillation_angle` | number | no | `90` | Fallback sweep width when the current Dyson sweep width cannot be derived from live state. |
+
+## Controls
+
+| Control | Entity or service used | Notes |
+| --- | --- | --- |
+| Power | `fan.turn_on`, `fan.turn_off` | Uses the configured fan entity. |
+| Auto | `fan.set_preset_mode` | Uses `Auto` and `Manual` preset modes when exposed. |
+| Night | related `switch.` entity | Looks for a same-device switch named `Night Mode`. |
+| Airflow direction | `fan.set_direction` | Toggles forward/reverse when supported by the fan entity. |
+| Airflow speed | `fan.set_percentage` | Uses the standard Home Assistant fan percentage service. |
+| Sleep timer | `hass_dyson.set_sleep_timer` | Provides 1H, 3H, and custom hour input. |
+| Direction wheel | `hass_dyson.set_oscillation_angles` or related number entities | Drag the wheel handle to point the fan. |
+| Sweep dial | related oscillation select entity or angle services | Supports direct, 45°, 90°, 180°, and wide sweep when available. |
+| Heat / Fan only | `climate.set_hvac_mode` | Appears when a related climate entity exists. |
+| Target temperature | `climate.set_temperature` | Uses the related climate entity min/max/step values. |
+
+## Sensor Badges
+
+The top badge row shows the most useful live values in a compact format:
+
+| Badge | Source | Meaning |
+| --- | --- | --- |
+| Temperature | related temperature sensor | Ambient temperature reported by the Dyson device. |
+| Humidity | related humidity sensor | Ambient relative humidity. |
+| AQI | related air-quality sensor | Air Quality Index or category exposed by the integration. |
+| Filter life | related HEPA/carbon filter sensors | Remaining filter life percentage. |
+
+The `More` button expands a focused air-quality section when matching sensors exist:
+
+| Detail | Meaning |
+| --- | --- |
+| AQI | Air Quality Index. A higher value or worse category usually means poorer air quality. |
+| PM2.5 | Fine particulate matter around 2.5 microns. |
+| PM10 | Larger particulate matter around 10 microns. |
+| VOC | Volatile Organic Compounds, usually gases and chemical vapors from cooking, cleaning products, smoke, or materials. |
+| NO2 | Nitrogen dioxide, commonly associated with combustion sources. |
+
+## Direction Snapshots
+
+Direction snapshots let you save repeatable aiming positions such as `Bed`, `Desk`, or `Door`.
+
+Each snapshot stores:
+
+- name
+- MDI icon
+- center direction
+- sweep width
+- airflow speed when available
+
+The snapshot delete flow is confirmation-based: first tap arms the pill as `DELETE`, second tap confirms.
+
+## Entity Discovery
+
+The card starts from the configured `fan.` entity, reads the Home Assistant entity/device registries, and looks for same-device companion entities.
+
+It currently looks for:
+
+- temperature sensor
+- humidity sensor
+- air-quality sensors
+- VOC sensor
+- HEPA filter life sensor
+- carbon filter life sensor
+- night mode switch
+- climate entity
+- oscillation select entity
+- oscillation low/high/center/span number entities
+
+If a model does not expose one of those entities, the related UI control is disabled or hidden.
+
+## Dyson Model Compatibility
+
+The card is designed to adapt to the entities exposed by `hass_dyson`, not to a hard-coded Dyson model list.
+
+That means:
+
+- purifier-only models can still use fan, speed, direction, sweep, sensor, filter, auto, and night controls when those entities exist
+- heater models can additionally show heat/fan-only and target temperature controls when a climate entity exists
+- models without reverse airflow, heat, sleep timer, or specific air-quality sensors will simply have those controls hidden or disabled
+
+## Troubleshooting
+
+### The card does not appear in the card picker
+
+Refresh or reopen Home Assistant after installing the dashboard resource. If it still does not appear, use a Manual card:
+
+```yaml
+type: custom:ha-dyson-card
+entity: fan.my_dyson
+```
+
+### HACS install works but the browser still shows an old version
+
+Hard refresh the Home Assistant frontend. If you edited the file manually under `www/community`, remove the generated `.gz` copy so Home Assistant/HACS serves the updated JavaScript.
+
+### Controls are missing
+
+Check that the missing feature is exposed by `hass_dyson` as an entity or supported fan/climate feature. The card hides or disables controls that cannot be safely mapped to live Home Assistant entities.
+
+### Direction or sweep behaves differently than expected
+
+Dyson models and `hass_dyson` entity sets vary. The card prefers same-device oscillation select/number entities when available and falls back to `hass_dyson.set_oscillation_angles` for angle commands.
 
 ## HACS Repository Shape
 
@@ -76,7 +205,27 @@ This repo follows the HACS Dashboard/plugin shape:
 
 - `ha-dyson-card.js` lives at the repository root
 - `hacs.json` declares `filename: ha-dyson-card.js`
+- `hacs.json` declares `content_in_root: true`
 - `.github/workflows/validate.yaml` runs HACS validation and JavaScript syntax checks
+- `CHANGELOG.md` tracks release-facing changes
+
+## Development Checks
+
+Run the syntax check locally:
+
+```bash
+node --check ha-dyson-card.js
+```
+
+The GitHub workflow also runs:
+
+- HACS plugin validation
+- JavaScript syntax validation on Node 24
+
+## Credits
+
+- Built for [`hass_dyson`](https://github.com/cmgrayb/hass-dyson)
+- Distributed as a HACS Dashboard/plugin repository
 
 ## License
 

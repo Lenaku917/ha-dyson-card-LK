@@ -1,7 +1,7 @@
 # HA Dyson Card
 
 <p align="center">
-  <img src=".github/images/ha-dyson-card-icon.jpg" alt="HA Dyson Card" width="180">
+  <img src=".github/images/ha-dyson-card-icon.png" alt="HA Dyson Card" width="180">
 </p>
 
 [![Release](https://img.shields.io/github/v/release/thanhn062/ha-dyson-card?style=for-the-badge)](https://github.com/thanhn062/ha-dyson-card/releases)

@@ -2210,9 +2210,12 @@ class HaDysonCard extends HTMLElement {
         .wheel-speed {
           position: absolute;
           ${speedOnLeft ? "left: 0; right: auto;" : "right: 0; left: auto;"}
-          top: var(--dyson-wheel-offset);
+          top: calc(var(--dyson-wheel-offset) + 24px);
           bottom: 0;
           width: 42px;
+          display: grid;
+          grid-template-rows: minmax(0, 1fr) 13px 32px;
+          gap: 6px;
           color: var(--secondary-text-color);
           font-size: 0.66rem;
           font-weight: 800;
@@ -2225,11 +2228,9 @@ class HaDysonCard extends HTMLElement {
         }
         .speed-control {
           --speed-fill: ${speedPercent}%;
-          position: absolute;
-          top: 24px;
-          left: 0;
+          position: relative;
           width: 42px;
-          height: calc(100% - 84px);
+          height: 100%;
           display: grid;
           place-items: center;
           border-radius: 999px;
@@ -2308,9 +2309,7 @@ class HaDysonCard extends HTMLElement {
           box-shadow: none;
         }
         .speed-value {
-          position: absolute;
-          left: 50%;
-          bottom: 39px;
+          position: relative;
           z-index: 2;
           min-width: 0;
           padding: 0;
@@ -2321,15 +2320,12 @@ class HaDysonCard extends HTMLElement {
           font-size: 0.62rem;
           font-weight: 850;
           line-height: 1;
-          transform: translateX(-50%);
           pointer-events: none;
           text-shadow: none;
           box-shadow: none;
         }
         .speed-power-button {
-          position: absolute;
-          left: 50%;
-          bottom: 0;
+          position: relative;
           z-index: 3;
           width: 42px;
           height: 32px;
@@ -2342,7 +2338,6 @@ class HaDysonCard extends HTMLElement {
           background: var(--dyson-pill-bg);
           color: var(--primary-text-color);
           box-shadow: var(--dyson-inner-highlight);
-          transform: translateX(-50%);
         }
         .speed-power-button.active {
           border-color: color-mix(in srgb, var(--primary-color, #4f46e5) 34%, transparent);

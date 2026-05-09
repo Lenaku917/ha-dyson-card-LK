@@ -1106,6 +1106,27 @@ class HaDysonCard extends HTMLElement {
     </button>`;
   }
 
+  _renderDirectionPresetMarkers() {
+    const markerSize = 34;
+    return this._directionPresets().map((preset) => {
+      const point = this._pointForAngle(160, 160, 120, this._visualAngleFromDevice(preset.direction));
+      const icon = String(preset.icon || "mdi:crosshairs-gps").trim() || "mdi:crosshairs-gps";
+      return `
+        <foreignObject
+          class="wheel-preset-marker-fo"
+          x="${(point.x - (markerSize / 2)).toFixed(3)}"
+          y="${(point.y - (markerSize / 2)).toFixed(3)}"
+          width="${markerSize}"
+          height="${markerSize}"
+        >
+          <div class="wheel-preset-marker" title="${this._escapeHtml(`${preset.name} ${preset.direction}\u00b0`)}">
+            <ha-icon icon="${this._escapeHtml(icon)}"></ha-icon>
+          </div>
+        </foreignObject>
+      `;
+    }).join("");
+  }
+
   _escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -2183,6 +2204,26 @@ class HaDysonCard extends HTMLElement {
           stroke-linecap: round;
           pointer-events: none;
         }
+        .wheel-preset-marker-fo {
+          pointer-events: none;
+        }
+        .wheel-preset-marker {
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--success-color, #22c55e) 82%, transparent);
+          border: 1px solid color-mix(in srgb, white 45%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, white 42%, transparent),
+            0 4px 10px color-mix(in srgb, #000 24%, transparent);
+          color: white;
+        }
+        .wheel-preset-marker ha-icon {
+          --mdc-icon-size: 20px;
+          filter: drop-shadow(0 1px 1px color-mix(in srgb, #000 32%, transparent));
+        }
         .wheel-handle {
           fill: var(--card-background-color, #fff);
           stroke: var(--primary-text-color, #111);
@@ -3170,6 +3211,7 @@ class HaDysonCard extends HTMLElement {
                     <circle class="wheel-core" cx="160" cy="160" r="48"></circle>
                     <circle class="wheel-core-inner" cx="160" cy="160" r="36"></circle>
                     ${operationActive ? `<circle class="wheel-spinner" cx="160" cy="160" r="42"></circle>` : ""}
+                    ${this._renderDirectionPresetMarkers()}
                     <circle class="wheel-handle" cx="${handle.x}" cy="${handle.y}" r="13"></circle>
                   </svg>
                 </button>

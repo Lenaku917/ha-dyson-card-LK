@@ -740,7 +740,7 @@ class HaDysonCard extends HTMLElement {
     const wheel = this.shadowRoot;
     if (!wheel) return;
     const bounds = this._boundsFromCenterWidth(direction, width);
-    const handle = this._pointForAngle(160, 160, 120, this._visualAngleFromDevice(bounds.center));
+    const handle = this._pointForAngle(160, 160, 128, this._visualAngleFromDevice(bounds.center));
     const cone = wheel.querySelector(".wheel-cone");
     const direct = wheel.querySelector(".wheel-direct");
     const handleCircle = wheel.querySelector(".wheel-handle");
@@ -1496,7 +1496,7 @@ class HaDysonCard extends HTMLElement {
     const rect = element.getBoundingClientRect();
     if (!rect.width) return false;
     const scale = rect.width / 320;
-    const handle = this._pointForAngle(160, 160, 120, this._visualAngleFromDevice(direction));
+    const handle = this._pointForAngle(160, 160, 128, this._visualAngleFromDevice(direction));
     const x = (event.clientX - rect.left) / scale;
     const y = (event.clientY - rect.top) / scale;
     const distance = Math.hypot(x - handle.x, y - handle.y);
@@ -1909,7 +1909,7 @@ class HaDysonCard extends HTMLElement {
     const sensorDetailGroups = this._sensorDetailGroups();
     const bounds = this._boundsFromCenterWidth(direction, width);
     const visualCenter = this._visualAngleFromDevice(bounds.center);
-    const handle = this._pointForAngle(160, 160, 120, visualCenter);
+    const handle = this._pointForAngle(160, 160, 128, visualCenter);
     const presetWidths = [0, 45, 90, 180, 350];
     const controlReady = Boolean(this._deviceId());
     const operationActive = this._busy || this._pendingActive();

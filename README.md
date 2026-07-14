@@ -13,7 +13,9 @@ I'm also just a self-taught developer, with depression (so I don't have much ene
 
 
 - Card Settings: Hide Airflow & Sleeptimer Section for a more compact layout<br>
+Or even more compact: hide the entire top control panel<br>
 <img src=".github/images/ha-dyson-card-LK.png" alt="HA Dyson Card compact layout" width="390">
+<img src=".github/images/ha-dyson-card-LK_hideAll.png" alt="HA Dyson Card compact layout" width="390">
 
 - Export presets as JSON text to copy
 - Card Settings: Add/Import presets JSON (for permanent storage & across devices)<br>

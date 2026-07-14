@@ -55,12 +55,16 @@ class HaDysonCard extends HTMLElement {
             select: {
               options: [
                 {
+                  value: "no",
+                  label: "No",
+                },
+                {
                   value: "yes",
                   label: "Yes",
                 },
                 {
-                  value: "no",
-                  label: "No",
+                  value: "all",
+                  label: "Yes, including Save, Auto & Night",
                 },
               ],
             },
@@ -96,7 +100,7 @@ class HaDysonCard extends HTMLElement {
           case "airflow_control_side":
             return "Places the vertical airflow speed control on the right or left side of the direction wheel.";
           case "hide_timer_section":
-            return "Removes the section with Airflow 'forward' and Sleeptimer selection";
+            return "Hides the section with Airflow 'forward' and Sleeptimer. 'Yes' hides the section but keeps the 'Save', 'Auto' and 'Night' buttons. 'Yes, including Save, Auto & Night' hides the entire top section.";
           case "presets_json":
             return "JSON array synced with dashboard config, e.g. [{\"name\":\"Desk\",\"icon\":\"mdi:desk\",\"location\":180}]";
           default:
@@ -2067,7 +2071,9 @@ class HaDysonCard extends HTMLElement {
     const speedAvailable = this._supportsFanSpeed(attributes);
     const airflowControlSide = String(this._config.airflow_control_side || "right").toLowerCase() === "left" ? "left" : "right";
     const speedOnLeft = airflowControlSide === "left";
-    const hideTimerSection = String(this._config.hide_timer_section || "no").toLowerCase() === "yes" ? "yes" : "no";
+    let hideTimer = String(this._config.hide_timer_section || "no").toLowerCase();
+    const hideTimerSection = hideTimer === "yes" || hideTimer === "all" ? hideTimer : "no";
+    const hideControlPanel = hideTimerSection === "all";
     const direction = this._currentDirection(attributes);
     const width = this._currentWidth(attributes);
     const sensorDetailGroups = this._sensorDetailGroups();
@@ -2119,7 +2125,6 @@ class HaDysonCard extends HTMLElement {
           --dyson-shadow: 0 4px 12px color-mix(in srgb, #000 16%, transparent);
           --dyson-inner-highlight: inset 0 1px 0 color-mix(in srgb, var(--primary-text-color) 5%, transparent);
           padding: 12px;
-          margin-block-end: max(12px, env(safe-area-inset-bottom));
           border-radius: 18px;
           overflow: hidden;
           color: var(--primary-text-color);
@@ -2145,6 +2150,9 @@ class HaDysonCard extends HTMLElement {
         .card {
           display: grid;
           gap: 10px;
+        }
+        .card.no-control-panel {
+          gap: 8px;
         }
         .header {
           display: block;
@@ -2319,6 +2327,9 @@ class HaDysonCard extends HTMLElement {
           position: relative;
           width: 100%;
           height: auto;
+        }
+        .card.no-control-panel .wheel-wrap {
+          --dyson-wheel-offset: 0px;
         }
         .wheel-stage {
           position: relative;
@@ -3348,14 +3359,15 @@ class HaDysonCard extends HTMLElement {
         }
       </style>
       <ha-card>
-        <div class="card ${this._busy ? "busy" : ""}">
+        <div class="card ${this._busy ? "busy" : ""} ${hideControlPanel ? "no-control-panel" : ""}">
           ${title ? `
             <div class="header">
               <div class="title">${this._escapeHtml(title)}</div>
             </div>
           ` : ""}
 
-          <div class="control-panel">
+          ${hideControlPanel ? "" : `
+            <div class="control-panel">
             <div class="control-grid">
               <button class="control-pill direction-preset-add-control" data-preset-add aria-label="Save current direction preset" ${controlReady ? "" : "disabled"}>
                 <ha-icon icon="mdi:camera-plus-outline"></ha-icon>
@@ -3403,7 +3415,8 @@ class HaDysonCard extends HTMLElement {
                 </div>
               </div>
             `}
-          </div>
+            </div>
+          `}
 
           <div class="control-shell">
             <div class="wheel-sensor-strip ${this._sensorDetailsOpen ? "expanded" : ""}">

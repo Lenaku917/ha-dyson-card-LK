@@ -1,3 +1,26 @@
+## Disclaimer
+I love this card and it works waaay better than the Dyson app. Big thanks to [thanhn062](https://github.com/thanhn062/ha-dyson-card) for creating this amazing card!<br>
+I didn't use Codex to make these changes/improvements...<br>
+... I used Copilot 😅<br>
+
+I'm also just a self-taught developer, with depression (so I don't have much energy, but I wanted to tweak the card for my own use)<br>
+
+
+## Changes
+- Direction wheel displays above the presets, so I don't have to play hide-and-seek to find it
+- Set fan direction by clicking on the green preset icons <br>
+<img src=".github/images/ha-dyson-card-wheel.png" alt="HA Dyson Card wheel" width="180">
+
+
+- Card Settings: Hide Airflow & Sleeptimer Section for a more compact layout<br>
+<img src=".github/images/ha-dyson-card-LK.png" alt="HA Dyson Card compact layout" width="390">
+
+- Export presets as JSON text to copy
+- Card Settings: Add/Import presets JSON (for permanent storage & across devices)<br>
+<img src=".github/images/ha-dyson-card-LK_export.png" alt="HA Dyson Card export" width="390"><br>
+<img src=".github/images/ha-dyson-card-LK_export-popup.png" alt="HA Dyson Card export popup" width="390"><br>
+<img src=".github/images/ha-dyson-card-LK_settings.png" alt="HA Dyson Card settings">
+
 # HA Dyson Card
 
 <p align="center">

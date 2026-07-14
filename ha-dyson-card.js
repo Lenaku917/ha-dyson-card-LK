@@ -5,7 +5,8 @@ class HaDysonCard extends HTMLElement {
     return {
       entity: "fan.my_dyson",
       airflow_control_side: "right",
-      hide_timer_section: "no"
+      hide_timer_section: "no",
+      presets_json: ""
     };
   }
 
@@ -65,6 +66,14 @@ class HaDysonCard extends HTMLElement {
             },
           },
         },
+        {
+          name: "presets_json",
+          selector: {
+            text: {
+              multiline: true,
+            },
+          },
+        },
       ],
       computeLabel: (schema) => {
         switch (schema.name) {
@@ -76,6 +85,8 @@ class HaDysonCard extends HTMLElement {
             return "Airflow control side";
           case "hide_timer_section":
             return "Hide Sleeptimer Section";
+          case "presets_json":
+            return "Presets JSON";
           default:
             return undefined;
         }
@@ -86,6 +97,8 @@ class HaDysonCard extends HTMLElement {
             return "Places the vertical airflow speed control on the right or left side of the direction wheel.";
           case "hide_timer_section":
             return "Removes the section with Airflow 'forward' and Sleeptimer selection";
+          case "presets_json":
+            return "JSON array synced with dashboard config, e.g. [{\"name\":\"Desk\",\"icon\":\"mdi:desk\",\"location\":180}]";
           default:
             return undefined;
         }
@@ -118,6 +131,7 @@ class HaDysonCard extends HTMLElement {
     this._timerMenuOpen = false;
     this._customTimerOpen = false;
     this._presetEditorOpen = false;
+    this._presetTransferMessage = "";
     this._presetDraftName = "";
     this._presetDraftIcon = "mdi:crosshairs-gps";
     this._pendingPresetDeleteId = null;
@@ -132,12 +146,14 @@ class HaDysonCard extends HTMLElement {
       title: "",
       airflow_control_side: "right",
       hide_timer_section: "no",
+      presets_json: "",
       ...config,
     };
     this._derived = null;
     this._timerMenuOpen = false;
     this._customTimerOpen = false;
     this._presetEditorOpen = false;
+    this._presetTransferMessage = "";
     this._presetDraftName = "";
     this._presetDraftIcon = "mdi:crosshairs-gps";
     this._pendingPresetDeleteId = null;
@@ -290,10 +306,6 @@ class HaDysonCard extends HTMLElement {
   _stateValue(entityId, fallback = "Unavailable") {
     const stateObj = this._stateObj(entityId);
     return stateObj?.state ?? fallback;
-  }
-
-  _friendlyName(entityId, fallback = "") {
-    return this._stateObj(entityId)?.attributes?.friendly_name || fallback || entityId || "";
   }
 
   _numericState(entityId) {
@@ -717,13 +729,6 @@ class HaDysonCard extends HTMLElement {
     return this._sourceDirection(attributes);
   }
 
-  _displayAngle(direction, width) {
-    if (!width) {
-      return `${direction}\u00b0 direct`;
-    }
-    return `${direction}\u00b0 center \u00b7 ${width}\u00b0 sweep`;
-  }
-
   _boundsFromCenterWidth(direction, width) {
     const normalizedWidth = this._normalizeAngle(width);
     const halfWidth = normalizedWidth / 2;
@@ -797,16 +802,6 @@ class HaDysonCard extends HTMLElement {
     if (direct) {
       direct.style.display = "none";
     }
-  }
-
-  _renderMetric(label, value, unit = "") {
-    if (!value || value === "Unavailable") return "";
-    return `
-      <div class="metric">
-        <div class="metric-label">${label}</div>
-        <div class="metric-value">${value}${unit}</div>
-      </div>
-    `;
   }
 
   _displayState(entityId, fallback = "—") {
@@ -991,51 +986,178 @@ class HaDysonCard extends HTMLElement {
     return `ha-dyson-card:direction-presets:${this._config.entity || "default"}`;
   }
 
+  _temporaryPresetStorageKey() {
+    return `${this._presetStorageKey()}:temporary`;
+  }
+
+  _configPresetStorageRaw() {
+    return String(this._config.presets_json || "").trim();
+  }
+
+  _useConfigPresetStorage() {
+    return Boolean(this._configPresetStorageRaw());
+  }
+
+  _readPresetStorageRaw() {
+    if (this._useConfigPresetStorage()) {
+      return this._configPresetStorageRaw();
+    }
+    return String(window.localStorage?.getItem(this._presetStorageKey()) || "").trim();
+  }
+
+  _readTemporaryPresetStorageRaw() {
+    return String(window.localStorage?.getItem(this._temporaryPresetStorageKey()) || "").trim();
+  }
+
+  _sanitizeDirectionPresets(presets, { keepIds = true } = {}) {
+    if (!Array.isArray(presets)) return [];
+    const usedIds = new Set();
+    const normalized = [];
+
+    presets.forEach((preset) => {
+      const name = String(preset?.name || "").trim();
+      const iconInput = String(preset?.icon || "mdi:crosshairs-gps").trim() || "mdi:crosshairs-gps";
+      const icon = iconInput.startsWith("mdi:") ? iconInput : `mdi:${iconInput}`;
+      const directionValue = preset?.direction ?? preset?.location ?? preset?.angle;
+      const direction = Number(directionValue);
+
+      if (!name || !Number.isFinite(direction)) return;
+
+      let id = keepIds ? String(preset?.id || "").trim() : "";
+      if (!id) {
+        const normalizedDirection = this._normalizeAngle(direction);
+        const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "preset";
+        const safeIcon = icon
+          .toLowerCase()
+          .replace(/^mdi:/, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "icon";
+        id = `preset-${safeName}-${safeIcon}-${normalizedDirection}`;
+      }
+      while (usedIds.has(id)) {
+        id = `${id}-dup`;
+      }
+      usedIds.add(id);
+
+      normalized.push({
+        id,
+        name,
+        icon,
+        direction: this._normalizeAngle(direction),
+      });
+    });
+
+    return normalized;
+  }
+
   _directionPresets() {
     try {
-      const raw = window.localStorage?.getItem(this._presetStorageKey());
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((preset) => {
-          const direction = Number(preset.direction);
-          return {
-            id: String(preset.id || ""),
-            name: String(preset.name || "").trim(),
-            icon: String(preset.icon || "mdi:crosshairs-gps").trim(),
-            direction: Number.isFinite(direction) ? this._normalizeAngle(direction) : NaN,
-          };
-        })
-        .filter((preset) => preset.id && preset.name && Number.isFinite(preset.direction));
+      if (!this._useConfigPresetStorage()) {
+        const raw = this._readPresetStorageRaw();
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        return this._sanitizeDirectionPresets(parsed, { keepIds: true }).map((preset) => ({
+          ...preset,
+          temporary: false,
+        }));
+      }
+
+      const configRaw = this._configPresetStorageRaw();
+      const configParsed = configRaw ? JSON.parse(configRaw) : [];
+      const configPresets = Array.isArray(configParsed)
+        ? this._sanitizeDirectionPresets(configParsed, { keepIds: true }).map((preset) => ({
+            ...preset,
+            temporary: false,
+          }))
+        : [];
+
+      const tempRaw = this._readTemporaryPresetStorageRaw();
+      const tempParsed = tempRaw ? JSON.parse(tempRaw) : [];
+      const temporaryPresets = Array.isArray(tempParsed)
+        ? this._sanitizeDirectionPresets(tempParsed, { keepIds: true }).map((preset) => ({
+            ...preset,
+            temporary: true,
+          }))
+        : [];
+
+      const known = new Set(
+        configPresets.map((preset) =>
+          `${preset.name.toLowerCase()}|${preset.icon}|${this._normalizeAngle(preset.direction)}`
+        )
+      );
+      const uniqueTemporary = temporaryPresets.filter((preset) => {
+        const key = `${preset.name.toLowerCase()}|${preset.icon}|${this._normalizeAngle(preset.direction)}`;
+        if (known.has(key)) return false;
+        known.add(key);
+        return true;
+      });
+
+      return [...configPresets, ...uniqueTemporary];
     } catch (_error) {
       return [];
     }
   }
 
-  _saveDirectionPresets(presets) {
+  _exportDirectionPresets() {
+    return JSON.stringify(
+      this._directionPresets().map((preset) => ({
+        name: preset.name,
+        icon: preset.icon,
+        location: this._normalizeAngle(preset.direction),
+      })),
+      null,
+      2,
+    );
+  }
+
+  async _saveDirectionPresets(presets) {
+    if (this._useConfigPresetStorage()) {
+      const serializedTemporary = JSON.stringify(
+        this._sanitizeDirectionPresets(presets, { keepIds: true }).map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          icon: preset.icon,
+          direction: preset.direction,
+        }))
+      );
+      try {
+        window.localStorage?.setItem(this._temporaryPresetStorageKey(), serializedTemporary);
+      } catch (_error) {
+        // Ignore temporary cache storage errors.
+      }
+      return;
+    }
+
+    const serialized = JSON.stringify(presets);
+
+    // Keep local storage updated as a fallback cache.
     try {
-      window.localStorage?.setItem(this._presetStorageKey(), JSON.stringify(presets));
+      window.localStorage?.setItem(this._presetStorageKey(), serialized);
     } catch (_error) {
       // Local storage can be unavailable in restricted browser contexts.
     }
+
+    return;
   }
 
-  _addDirectionPreset(name, icon, direction) {
+  async _addDirectionPreset(name, icon, direction) {
     const trimmedName = String(name || "").trim();
     if (!trimmedName) return;
     const normalizedIcon = String(icon || "mdi:crosshairs-gps").trim() || "mdi:crosshairs-gps";
-    const presets = this._directionPresets();
+    const presets = this._useConfigPresetStorage()
+      ? this._directionPresets().filter((preset) => preset.temporary)
+      : this._directionPresets();
     presets.push({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: trimmedName,
       icon: normalizedIcon.startsWith("mdi:") ? normalizedIcon : `mdi:${normalizedIcon}`,
       direction: this._normalizeAngle(direction),
     });
-    this._saveDirectionPresets(presets);
+    await this._saveDirectionPresets(presets);
   }
 
-  _removeDirectionPreset(id) {
-    this._saveDirectionPresets(this._directionPresets().filter((preset) => preset.id !== id));
+  async _removeDirectionPreset(id) {
+    await this._saveDirectionPresets(this._directionPresets().filter((preset) => preset.id !== id));
     if (this._pendingPresetDeleteId === id) {
       this._pendingPresetDeleteId = null;
     }
@@ -1049,6 +1171,7 @@ class HaDysonCard extends HTMLElement {
 
   _renderDirectionPresets(direction, width, controlReady) {
     const presets = this._directionPresets();
+    const configPresetsMode = this._useConfigPresetStorage();
     const disabled = controlReady ? "" : "disabled";
     const iconChoices = [
       "mdi:crosshairs-gps",
@@ -1061,6 +1184,9 @@ class HaDysonCard extends HTMLElement {
       "mdi:account",
     ];
     const draftIcon = iconChoices.includes(this._presetDraftIcon) ? this._presetDraftIcon : "mdi:crosshairs-gps";
+    const transferMessage = this._presetTransferMessage
+      ? `<div class="preset-transfer-message">${this._escapeHtml(this._presetTransferMessage)}</div>`
+      : "";
     const editor = this._presetEditorOpen ? `
       <div class="preset-editor">
         <input class="preset-name-input" type="text" placeholder="Name" aria-label="Preset name" value="${this._escapeHtml(this._presetDraftName || "")}" />
@@ -1071,8 +1197,12 @@ class HaDysonCard extends HTMLElement {
             </button>
           `).join("")}
         </div>
-        <button class="preset-action" data-preset-save>Save</button>
-        <button class="preset-action" data-preset-cancel>Cancel</button>
+        <div class="preset-editor-actions">
+          <button class="preset-action" data-preset-save>Save</button>
+          <button class="preset-action" data-preset-cancel>Cancel</button>
+          <button class="preset-action" data-preset-export ${presets.length ? "" : "disabled"}>Export</button>
+        </div>
+        ${configPresetsMode ? `<div class="preset-editor-note">Saved presets are temporary (saved as device cache) Use export and paste the JSON text into the card settings Presets for permanent storage.</div>` : ""}
       </div>
     ` : "";
 
@@ -1081,17 +1211,21 @@ class HaDysonCard extends HTMLElement {
         <div class="direction-presets-row">
           ${presets.length ? presets.map((preset) => {
             const confirmingDelete = this._pendingPresetDeleteId === preset.id;
+            const presetActionAttr = confirmingDelete
+              ? `data-preset-delete-confirm="${this._escapeHtml(preset.id)}" title="Delete direction preset"`
+              : `data-preset-apply="${this._escapeHtml(preset.id)}" title="${this._escapeHtml(`${preset.direction}\u00b0 direction`)}"`;
             return `
-            <div class="direction-preset-item ${confirmingDelete ? "confirm-delete" : ""}">
-              <button class="direction-preset-button" ${confirmingDelete ? `data-preset-delete-confirm="${this._escapeHtml(preset.id)}" title="Delete direction preset"` : `data-preset-apply="${this._escapeHtml(preset.id)}" title="${this._escapeHtml(`${preset.direction}\u00b0 direction`)}"`} ${disabled}>
+            <div class="direction-preset-item ${confirmingDelete ? "confirm-delete" : ""} ${preset.temporary ? "temporary" : ""}">
+              <button class="direction-preset-button" ${presetActionAttr} ${disabled}>
                 ${confirmingDelete ? "" : `<ha-icon icon="${this._escapeHtml(preset.icon)}"></ha-icon>`}
                 <span>${confirmingDelete ? "DELETE" : this._escapeHtml(preset.name)}</span>
               </button>
-              <button class="direction-preset-remove" data-preset-remove="${this._escapeHtml(preset.id)}" aria-label="${confirmingDelete ? "Delete direction preset" : `Remove ${this._escapeHtml(preset.name)}`}">${confirmingDelete ? "×" : "×"}</button>
+              ${configPresetsMode && !preset.temporary ? "" : `<button class="direction-preset-remove" data-preset-remove="${this._escapeHtml(preset.id)}" aria-label="${confirmingDelete ? "Delete direction preset" : `Remove ${this._escapeHtml(preset.name)}`}">${confirmingDelete ? "×" : "×"}</button>`}
             </div>
           `;
           }).join("") : `<span class="direction-presets-empty">No direction presets saved</span>`}
         </div>
+        ${transferMessage}
         ${editor}
       </div>
     `;
@@ -1115,11 +1249,6 @@ class HaDysonCard extends HTMLElement {
     `;
   }
 
-  _renderWidthOption(preset, currentWidth) {
-    const label = preset === 0 ? "Direct" : `${preset}\u00b0`;
-    return `<option value="${preset}" ${currentWidth === preset ? "selected" : ""}>${label}</option>`;
-  }
-
   _renderSweepButton(preset, currentWidth, disabled = false) {
     const active = currentWidth === preset;
     const label = preset === 0 ? "0" : preset === 350 ? "350" : `${preset}`;
@@ -1136,8 +1265,10 @@ class HaDysonCard extends HTMLElement {
       const point = this._pointForAngle(160, 160, markerRadius, this._visualAngleFromDevice(preset.direction));
       const icon = String(preset.icon || "mdi:crosshairs-gps").trim() || "mdi:crosshairs-gps";
       return `
-        <div
+        <button
+          type="button"
           class="wheel-preset-marker"
+          data-preset-apply="${this._escapeHtml(preset.id)}"
           style="
             left: ${((point.x / 320) * 100).toFixed(4)}%;
             top: ${((point.y / 320) * 100).toFixed(4)}%;
@@ -1145,9 +1276,10 @@ class HaDysonCard extends HTMLElement {
             height: ${markerSize}px;
           "
           title="${this._escapeHtml(`${preset.name} ${preset.direction}\u00b0`)}"
+          aria-label="${this._escapeHtml(`Set direction preset ${preset.name}`)}"
         >
           <ha-icon icon="${this._escapeHtml(icon)}"></ha-icon>
-        </div>
+        </button>
       `;
     }).join("");
   }
@@ -1515,17 +1647,6 @@ class HaDysonCard extends HTMLElement {
     return this._deviceAngleFromVisual(degrees);
   }
 
-  _isPointerOnHandle(event, element, direction) {
-    const rect = element.getBoundingClientRect();
-    if (!rect.width) return false;
-    const scale = rect.width / 320;
-    const handle = this._pointForAngle(160, 160, 128, this._visualAngleFromDevice(direction));
-    const x = (event.clientX - rect.left) / scale;
-    const y = (event.clientY - rect.top) / scale;
-    const distance = Math.hypot(x - handle.x, y - handle.y);
-    return distance <= 28;
-  }
-
   _bindWheel(attributes) {
     const wheel = this.shadowRoot?.querySelector(".wheel-button");
     const handleTarget = this.shadowRoot?.querySelector(".wheel-handle-hit");
@@ -1728,6 +1849,7 @@ class HaDysonCard extends HTMLElement {
 
     this.shadowRoot?.querySelector("[data-preset-add]")?.addEventListener("click", () => {
       this._pendingPresetDeleteId = null;
+      this._presetTransferMessage = "";
       this._presetDraftName = "";
       this._presetDraftIcon = "mdi:crosshairs-gps";
       this._presetEditorOpen = true;
@@ -1739,6 +1861,25 @@ class HaDysonCard extends HTMLElement {
       this._presetDraftName = "";
       this._presetDraftIcon = "mdi:crosshairs-gps";
       this._pendingPresetDeleteId = null;
+      this._presetTransferMessage = "";
+      this._render();
+    });
+
+    this.shadowRoot?.querySelector("[data-preset-export]")?.addEventListener("click", async () => {
+      this._clearPresetDeleteArm();
+      const payload = this._exportDirectionPresets();
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(payload);
+          this._presetTransferMessage = "Preset JSON copied to clipboard.";
+        } else {
+          window.prompt("Copy presets JSON", payload);
+          this._presetTransferMessage = "Clipboard API unavailable. JSON shown in prompt.";
+        }
+      } catch (_error) {
+        window.prompt("Copy presets JSON", payload);
+        this._presetTransferMessage = "Clipboard blocked. JSON shown in prompt.";
+      }
       this._render();
     });
 
@@ -1756,11 +1897,11 @@ class HaDysonCard extends HTMLElement {
       });
     });
 
-    this.shadowRoot?.querySelector("[data-preset-save]")?.addEventListener("click", () => {
+    this.shadowRoot?.querySelector("[data-preset-save]")?.addEventListener("click", async () => {
       this._syncPresetDraftFromEditor();
       const name = this._presetDraftName || this.shadowRoot?.querySelector(".preset-name-input")?.value;
       const icon = this._presetDraftIcon || this.shadowRoot?.querySelector("[data-preset-icon].active")?.dataset?.presetIcon || "mdi:crosshairs-gps";
-      this._addDirectionPreset(
+      await this._addDirectionPreset(
         name,
         icon,
         this._currentDirection(attributes),
@@ -1773,9 +1914,9 @@ class HaDysonCard extends HTMLElement {
     });
 
     this.shadowRoot?.querySelectorAll("[data-preset-delete-confirm]")?.forEach((button) => {
-      button.addEventListener("click", (event) => {
+      button.addEventListener("click", async (event) => {
         event.stopPropagation();
-        this._removeDirectionPreset(button.dataset.presetDeleteConfirm);
+        await this._removeDirectionPreset(button.dataset.presetDeleteConfirm);
         this._render();
       });
     });
@@ -1787,17 +1928,16 @@ class HaDysonCard extends HTMLElement {
         if (this._pendingPresetDeleteId) {
           this._pendingPresetDeleteId = null;
           this._render();
-          return;
         }
         await this._commitDirection(preset.direction, this._currentWidth(attributes));
       });
     });
 
     this.shadowRoot?.querySelectorAll("[data-preset-remove]")?.forEach((button) => {
-      button.addEventListener("click", (event) => {
+      button.addEventListener("click", async (event) => {
         event.stopPropagation();
         if (this._pendingPresetDeleteId === button.dataset.presetRemove) {
-          this._removeDirectionPreset(button.dataset.presetRemove);
+          await this._removeDirectionPreset(button.dataset.presetRemove);
         } else {
           this._pendingPresetDeleteId = button.dataset.presetRemove;
         }
@@ -2236,6 +2376,7 @@ class HaDysonCard extends HTMLElement {
           z-index: 2;
           display: grid;
           place-items: center;
+          padding: 0;
           border-radius: 999px;
           background: color-mix(in srgb, var(--success-color, #22c55e) 82%, transparent);
           border: 1px solid color-mix(in srgb, white 45%, transparent);
@@ -2243,7 +2384,8 @@ class HaDysonCard extends HTMLElement {
             inset 0 1px 0 color-mix(in srgb, white 42%, transparent),
             0 4px 10px color-mix(in srgb, #000 24%, transparent);
           color: white;
-          pointer-events: none;
+          pointer-events: auto;
+          cursor: pointer;
         }
         .wheel-preset-marker ha-icon {
           --mdc-icon-size: 18px;
@@ -2942,6 +3084,12 @@ class HaDysonCard extends HTMLElement {
         .direction-presets-row::-webkit-scrollbar {
           display: none;
         }
+        .preset-transfer-message {
+          min-height: 18px;
+          color: var(--secondary-text-color);
+          font-size: 0.68rem;
+          font-weight: 700;
+        }
         .direction-preset-item {
           display: inline-flex;
           align-items: center;
@@ -2954,6 +3102,10 @@ class HaDysonCard extends HTMLElement {
         .direction-preset-item.confirm-delete {
           border-color: color-mix(in srgb, #ef4444 68%, transparent);
           background: color-mix(in srgb, #ef4444 18%, var(--dyson-raised-bg));
+        }
+        .direction-preset-item.temporary {
+          border-color: color-mix(in srgb, #7a8ea8 62%, transparent);
+          background: color-mix(in srgb, #7a8ea8 26%, var(--dyson-raised-bg));
         }
         .direction-preset-button,
         .direction-preset-remove,
@@ -2972,6 +3124,7 @@ class HaDysonCard extends HTMLElement {
           align-items: center;
           gap: 7px;
           padding: 0 10px;
+          cursor: pointer;
         }
         .direction-preset-item.confirm-delete .direction-preset-button {
           color: #ef4444;
@@ -3015,6 +3168,27 @@ class HaDysonCard extends HTMLElement {
           grid-template-columns: minmax(0, 1fr) auto auto;
           gap: 6px;
           align-items: center;
+        }
+        .preset-editor-actions {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: nowrap;
+        }
+        .preset-editor-actions [data-preset-save] {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .preset-editor-actions [data-preset-cancel],
+        .preset-editor-actions [data-preset-export] {
+          flex: 0 0 auto;
+        }
+        .preset-editor-note {
+          grid-column: 1 / -1;
+          color: var(--secondary-text-color);
+          font-size: 0.68rem;
+          font-weight: 700;
         }
         .preset-name-input {
           min-width: 0;

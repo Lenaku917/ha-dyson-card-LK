@@ -2251,10 +2251,12 @@ class HaDysonCard extends HTMLElement {
         }
         .wheel-handle {
           fill: var(--card-background-color, #fff);
-          stroke: var(--primary-text-color, #111);
-          stroke-width: 5;
+          stroke: none;
           cursor: ${controlReady ? "grab" : "default"};
           pointer-events: none;
+        }
+        .wheel-handle.direct-mode {
+          fill: color-mix(in srgb, var(--primary-color, #4f46e5) 72%, white 8%);
         }
         .wheel-handle-hit {
           position: absolute;
@@ -2270,6 +2272,21 @@ class HaDysonCard extends HTMLElement {
           cursor: ${controlReady ? "grab" : "default"};
           touch-action: none;
           z-index: 3;
+        }
+        .wheel-handle-hit::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 26px;
+          height: 26px;
+          transform: translate(-50%, -50%);
+          border-radius: 999px;
+          background: transparent;
+          box-shadow:
+            0 0 0 2px var(--card-background-color, #fff),
+            0 0 0 5px var(--primary-text-color, #111);
+          pointer-events: none;
         }
         .wheel-handle-hit:active {
           cursor: grabbing;
@@ -3175,42 +3192,42 @@ class HaDysonCard extends HTMLElement {
             </div>
 
             ${hideTimerSection === "yes" ? "" : `
-            <div class="direction-row">
-              <div class="airflow-control">
-                <div class="row-label">
-                  <span>Airflow</span>
-                </div>
-                <button class="direction-chip active" data-direction-toggle aria-label="Toggle airflow direction" ${airflowDirectionAvailable ? "" : "disabled"}>
-                  <ha-icon icon="${airflowDirection === "forward" ? "mdi:arrow-up-bold" : "mdi:arrow-down-bold"}"></ha-icon>
-                  <span>${airflowDirection === "forward" ? "Forward" : "Reverse"}</span>
-                </button>
-              </div>
-              <div class="sleep-timer-control">
-                <div class="row-label">
-                  <span>Sleep Timer</span>
-                </div>
-                <div class="timer-inline-buttons">
-                  ${this._renderTimerButton(60, "1H", activeTimer)}
-                  ${this._renderTimerButton(180, "3H", activeTimer)}
-                  <button class="timer-chip timer-plus ${this._customTimerOpen ? "active" : ""}" data-timer-custom aria-label="Custom sleep timer">
-                    <ha-icon icon="mdi:plus"></ha-icon>
+              <div class="direction-row">
+                <div class="airflow-control">
+                  <div class="row-label">
+                    <span>Airflow</span>
+                  </div>
+                  <button class="direction-chip active" data-direction-toggle aria-label="Toggle airflow direction" ${airflowDirectionAvailable ? "" : "disabled"}>
+                    <ha-icon icon="${airflowDirection === "forward" ? "mdi:arrow-up-bold" : "mdi:arrow-down-bold"}"></ha-icon>
+                    <span>${airflowDirection === "forward" ? "Forward" : "Reverse"}</span>
                   </button>
                 </div>
+                <div class="sleep-timer-control">
+                  <div class="row-label">
+                    <span>Sleep Timer</span>
+                  </div>
+                  <div class="timer-inline-buttons">
+                    ${this._renderTimerButton(60, "1H", activeTimer)}
+                    ${this._renderTimerButton(180, "3H", activeTimer)}
+                    <button class="timer-chip timer-plus ${this._customTimerOpen ? "active" : ""}" data-timer-custom aria-label="Custom sleep timer">
+                      <ha-icon icon="mdi:plus"></ha-icon>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
             `}
             ${hideTimerSection === "yes" ? "" : `
-            <div class="timer-flyout" style="${this._customTimerOpen ? "" : "display:none;"}">
-              <div class="row-label">
-                <span>Sleep timer</span>
-                <strong>${timerLabel}</strong>
+              <div class="timer-flyout" style="${this._customTimerOpen ? "" : "display:none;"}">
+                <div class="row-label">
+                  <span>Sleep timer</span>
+                  <strong>${timerLabel}</strong>
+                </div>
+                <div class="timer-custom">
+                  <input class="timer-custom-input" type="number" min="1" max="9" step="1" inputmode="numeric" placeholder="Hours" />
+                  <button class="timer-action" data-timer-set>Set</button>
+                  <button class="timer-action" data-timer-cancel>Cancel</button>
+                </div>
               </div>
-              <div class="timer-custom">
-                <input class="timer-custom-input" type="number" min="1" max="9" step="1" inputmode="numeric" placeholder="Hours" />
-                <button class="timer-action" data-timer-set>Set</button>
-                <button class="timer-action" data-timer-cancel>Cancel</button>
-              </div>
-            </div>
             `}
           </div>
 
@@ -3237,15 +3254,15 @@ class HaDysonCard extends HTMLElement {
                     <line class="wheel-limit" x1="${lowerLimitInner.x}" y1="${lowerLimitInner.y}" x2="${lowerLimitOuter.x}" y2="${lowerLimitOuter.y}"></line>
                     <line class="wheel-limit" x1="${upperLimitInner.x}" y1="${upperLimitInner.y}" x2="${upperLimitOuter.x}" y2="${upperLimitOuter.y}"></line>
                     <path class="wheel-cone" d="${conePath}" style="${bounds.width ? "" : "display:none;"}"></path>
-                    <path class="wheel-direct" d="${directPath}" style="${bounds.width ? "display:none;" : ""}"></path>
+                    <path class="wheel-direct" d="${directPath}" style="display:none;"></path>
                     <circle class="wheel-core" cx="160" cy="160" r="48"></circle>
                     <circle class="wheel-core-inner" cx="160" cy="160" r="36"></circle>
                     ${operationActive ? `<circle class="wheel-spinner" cx="160" cy="160" r="42"></circle>` : ""}
-                    <circle class="wheel-handle" cx="${handle.x}" cy="${handle.y}" r="13"></circle>
+                    <circle class="wheel-handle ${bounds.width === 0 ? "direct-mode" : ""}" cx="${handle.x}" cy="${handle.y}" r="14"></circle>
                   </svg>
                 </button>
                 ${this._renderDirectionPresetMarkers()}
-                <button class="wheel-handle-hit" aria-label="Drag to set Dyson direction"></button>
+                <button class="wheel-handle-hit ${bounds.width === 0 ? "direct-mode" : ""}" aria-label="Drag to set Dyson direction"></button>
                 <div class="wheel-center-info">
                   <div class="sweep-dial sweep-dial-active-${bounds.width}" aria-label="Sweep presets">
                     ${presetWidths.map((preset) => this._renderSweepButton(preset, bounds.width, !controlReady)).join("")}

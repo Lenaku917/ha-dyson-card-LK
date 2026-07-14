@@ -5,6 +5,7 @@ class HaDysonCard extends HTMLElement {
     return {
       entity: "fan.my_dyson",
       airflow_control_side: "right",
+      hide_timer_section: "no"
     };
   }
 
@@ -47,6 +48,23 @@ class HaDysonCard extends HTMLElement {
             },
           },
         },
+        {
+          name: "hide_timer_section",
+          selector: {
+            select: {
+              options: [
+                {
+                  value: "yes",
+                  label: "Yes",
+                },
+                {
+                  value: "no",
+                  label: "No",
+                },
+              ],
+            },
+          },
+        },
       ],
       computeLabel: (schema) => {
         switch (schema.name) {
@@ -56,6 +74,8 @@ class HaDysonCard extends HTMLElement {
             return "Title";
           case "airflow_control_side":
             return "Airflow control side";
+          case "hide_timer_section":
+            return "Hide Sleeptimer Section";
           default:
             return undefined;
         }
@@ -64,6 +84,8 @@ class HaDysonCard extends HTMLElement {
         switch (schema.name) {
           case "airflow_control_side":
             return "Places the vertical airflow speed control on the right or left side of the direction wheel.";
+          case "hide_timer_section":
+            return "Removes the section with Airflow 'forward' and Sleeptimer selection";
           default:
             return undefined;
         }
@@ -109,6 +131,7 @@ class HaDysonCard extends HTMLElement {
     this._config = {
       title: "",
       airflow_control_side: "right",
+      hide_timer_section: "no",
       ...config,
     };
     this._derived = null;
@@ -1904,6 +1927,7 @@ class HaDysonCard extends HTMLElement {
     const speedAvailable = this._supportsFanSpeed(attributes);
     const airflowControlSide = String(this._config.airflow_control_side || "right").toLowerCase() === "left" ? "left" : "right";
     const speedOnLeft = airflowControlSide === "left";
+    const hideTimerSection = String(this._config.hide_timer_section || "no").toLowerCase() === "yes" ? "yes" : "no";
     const direction = this._currentDirection(attributes);
     const width = this._currentWidth(attributes);
     const sensorDetailGroups = this._sensorDetailGroups();
@@ -3150,6 +3174,7 @@ class HaDysonCard extends HTMLElement {
               ${this._renderToggleButton("night", "Night", "mdi:weather-night", nightActive, !this._nightModeEntity())}
             </div>
 
+            ${hideTimerSection === "yes" ? "" : `
             <div class="direction-row">
               <div class="airflow-control">
                 <div class="row-label">
@@ -3173,6 +3198,8 @@ class HaDysonCard extends HTMLElement {
                 </div>
               </div>
             </div>
+            `}
+            ${hideTimerSection === "yes" ? "" : `
             <div class="timer-flyout" style="${this._customTimerOpen ? "" : "display:none;"}">
               <div class="row-label">
                 <span>Sleep timer</span>
@@ -3184,6 +3211,7 @@ class HaDysonCard extends HTMLElement {
                 <button class="timer-action" data-timer-cancel>Cancel</button>
               </div>
             </div>
+            `}
           </div>
 
           <div class="control-shell">
